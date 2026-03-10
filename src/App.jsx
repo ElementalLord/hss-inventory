@@ -412,7 +412,20 @@ const loadData = async () => {
     supabase.from('items').select('*'),
     supabase.from('transactions').select('*'),
   ]);
-  if (u?.length) setUsers(u);
+  if (u?.length) {
+    setUsers(prev => {
+      const merged = [...prev];
+      u.forEach(dbUser => {
+        const idx = merged.findIndex(x => x.email.toLowerCase() === dbUser.email.toLowerCase());
+        if (idx > -1) {
+          merged[idx] = { ...merged[idx], ...dbUser };
+        } else {
+          merged.push(dbUser);
+        }
+      });
+      return merged;
+    });
+  }
   if (it?.length) setItems(it);
   if (tx?.length) setTransactions(tx.map(t => ({
     id: t.id, itemId: t.item_id, itemName: t.item_name,
