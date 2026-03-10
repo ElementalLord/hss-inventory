@@ -3,9 +3,16 @@ import { useState, useEffect, useRef } from "react";
 
 // ── Seed Data ────────────────────────────────────────────────────────────────
 const SEED_USERS = [
-  { id: "u0", name: "Admin User", email: "admin@hss.org", role: "admin", status: "approved" },
-  { id: "u1", name: "Priya Sharma", email: "priya@example.com", role: "user", status: "approved" },
-  { id: "u2", name: "Raj Patel", email: "raj@example.com", role: "user", status: "pending" },
+  { id: "u0", name: "Naitik", email: "naitik@hss.org", role: "admin", status: "approved", expectedOtp: "492817" },
+  { id: "u1", name: "Sameer", email: "sameer@hss.org", role: "admin", status: "approved", expectedOtp: "781204" },
+  { id: "u2", name: "Ketul", email: "ketul@hss.org", role: "admin", status: "approved", expectedOtp: "630915" },
+  { id: "u3", name: "Pradeep", email: "pradeep@hss.org", role: "admin", status: "approved", expectedOtp: "254670" },
+  { id: "u4", name: "Admin1", email: "admin1@hss.org", role: "admin", status: "approved", expectedOtp: "108432" },
+  { id: "u5", name: "Admin2", email: "admin2@hss.org", role: "admin", status: "approved", expectedOtp: "396520" },
+  { id: "u6", name: "Admin3", email: "admin3@hss.org", role: "admin", status: "approved", expectedOtp: "875103" },
+  { id: "u7", name: "Admin4", email: "admin4@hss.org", role: "admin", status: "approved", expectedOtp: "542681" },
+  { id: "u8", name: "Admin5", email: "admin5@hss.org", role: "admin", status: "approved", expectedOtp: "219407" },
+  { id: "u9", name: "Admin6", email: "admin6@hss.org", role: "admin", status: "approved", expectedOtp: "760195" },
 ];
 
 const CATEGORIES = ["Ghosh", "Kitchen", "Decoration", "Food", "Audio/Visual", "Sports", "Office", "Other"];
@@ -423,16 +430,38 @@ const loadData = async () => {
 
   // ── Auth ──
   const sendOTP = (user) => {
-    setOtpTarget(user);
+    const otp = user.expectedOtp || Math.floor(100000 + Math.random() * 900000).toString();
+    setOtpTarget({ ...user, expectedOtp: otp });
     setOtpValue("");
     setAuthStep("otp");
-    showToast(`OTP sent to ${user.email} (use 1234 for demo)`, "success");
+    showToast(`OTP sent to ${user.email} (use ${otp} for demo)`, "success");
   };
 
   const handleLogin = () => {
     const u = users.find(x => x.email.toLowerCase() === loginEmail.toLowerCase());
     if (!u) { showToast("No account found with that email.", "error"); return; }
     sendOTP(u);
+  };
+
+  const handleRegister = () => {
+    if (!regData.name || !regData.email) { showToast("Please fill in all fields.", "error"); return; }
+    const exists = users.find(x => x.email.toLowerCase() === regData.email.toLowerCase());
+    if (exists) { showToast("An account with that email already exists.", "error"); return; }
+    const newUser = { id: uid(), name: regData.name, email: regData.email, role: "user", status: "pending" };
+    setUsers(prev => [...prev, newUser]);
+    sendOTP(newUser);
+  };
+
+  const handleOTPVerify = () => {
+    const expected = otpTarget?.expectedOtp || "1234";
+    if (otpValue.trim() !== expected) { showToast(`Invalid OTP. Try ${expected} for demo.`, "error"); return; }
+    const u = users.find(x => x.id === otpTarget.id) || otpTarget;
+    if (u.status === "pending") {
+      setCurrentUser(u); setAuthStep("pending");
+    } else {
+      setCurrentUser(u); setView("dashboard");
+      showToast(`Welcome back, ${u.name}!`, "success");
+    }
   };
 
   const handleRegister = () => {
