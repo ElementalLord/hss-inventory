@@ -565,7 +565,7 @@ const handleCheckIn = async (txId) => {
             <div className="auth-logo">
               <div className="auth-logo-icon">🪷</div>
               <div>
-                <h1>HSS Inventory</h1>
+                <h1>HSS Bhandar</h1>
                 <span>Hindu Swayamsevak Sangh</span>
               </div>
             </div>
@@ -654,7 +654,7 @@ const handleCheckIn = async (txId) => {
         <aside className="sidebar">
           <div className="sidebar-logo">
             <div className="logo-icon">🪷</div>
-            <h2>HSS Inventory</h2>
+            <h2>HSS Bhandar</h2>
             <span>Inventory Manager</span>
           </div>
           <nav className="sidebar-nav">
