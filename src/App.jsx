@@ -451,7 +451,18 @@ const loadData = async () => {
   };
 
   const handleLogin = () => {
-    const u = users.find(x => x.email.toLowerCase() === loginEmail.toLowerCase());
+    const normalizedEmail = loginEmail.trim().toLowerCase();
+    let u = users.find(x => x.email.toLowerCase() === normalizedEmail);
+    if (!u) {
+      // Fallback to seeded users in case Supabase hasn’t been seeded / is empty
+      u = SEED_USERS.find(x => x.email.toLowerCase() === normalizedEmail);
+      if (u) {
+        setUsers(prev => {
+          if (prev.some(x => x.email.toLowerCase() === normalizedEmail)) return prev;
+          return [...prev, u];
+        });
+      }
+    }
     if (!u) { showToast("No account found with that email.", "error"); return; }
     sendOTP(u);
   };
