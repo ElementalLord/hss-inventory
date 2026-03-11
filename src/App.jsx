@@ -413,6 +413,13 @@ const loadData = async () => {
     ]);
 
     if (u?.length) {
+      // Remove unwanted admin if it exists in the DB
+      try {
+        await supabase.from('users').delete().eq('email', 'naitik.s.patel10@gmail.com');
+      } catch (err) {
+        console.warn("Unable to remove unwanted admin user:", err);
+      }
+
       setUsers(prev => {
         const merged = [...prev];
         u.forEach(dbUser => {
@@ -445,14 +452,48 @@ const loadData = async () => {
       }
     }
 
-    if (it?.length) setItems(it);
-    if (tx?.length) setTransactions(tx.map(t => ({
-      id: t.id, itemId: t.item_id, itemName: t.item_name,
-      quantity: t.quantity, checkedOutBy: t.checked_out_by,
-      checkedOutByName: t.checked_out_by_name, checkOutTime: t.check_out_time,
-      checkedInBy: t.checked_in_by, checkedInByName: t.checked_in_by_name,
-      checkInTime: t.check_in_time, status: t.status,
-    })));
+    if (it?.length) {
+      setItems(it);
+    } else {
+      // Ensure seed items exist in the DB (and persist them) so defaults stay saved but remain editable.
+      try {
+        const { data: existingItems } = await supabase.from('items').select('*');
+        const existingIds = (existingItems || []).map(i => i.id);
+        const missing = SEED_ITEMS.filter(i => !existingIds.includes(i.id));
+        if (missing.length) {
+          await supabase.from('items').insert(missing.map(i => ({
+            id: i.id, name: i.name, quantity: i.quantity, category: i.category,
+            location: i.location, image: i.image,
+          })));
+          setItems(prev => {
+            const have = prev.map(x => x.id);
+            const toAdd = missing.filter(i => !have.includes(i.id));
+            return [...prev, ...toAdd];
+          });
+        }
+      } catch (err) {
+        console.warn("Unable to persist seed items to Supabase:", err);
+      }
+    }
+
+    // Clear history so the app starts empty each time.
+    try {
+      if (tx?.length) {
+        await supabase.from('transactions').delete().neq('id', '');
+      }
+      setTransactions([]);
+    } catch (err) {
+      console.warn("Unable to clear transaction history:", err);
+      if (tx?.length) {
+        setTransactions(tx.map(t => ({
+          id: t.id, itemId: t.item_id, itemName: t.item_name,
+          quantity: t.quantity, checkedOutBy: t.checked_out_by,
+          checkedOutByName: t.checked_out_by_name, checkOutTime: t.check_out_time,
+          checkedInBy: t.checked_in_by, checkedInByName: t.checked_in_by_name,
+          checkInTime: t.check_in_time, status: t.status,
+        })));
+      }
+    }
   } catch (err) {
     console.warn("Failed to load data from Supabase:", err);
   }
