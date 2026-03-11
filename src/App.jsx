@@ -563,7 +563,8 @@ const loadData = async () => {
     if (u.status === "pending") {
       setCurrentUser(u); setAuthStep("pending");
     } else {
-      setCurrentUser(u); setView("dashboard");
+      setCurrentUser(u);
+      setView(u.role === "admin" ? "inventory" : "dashboard");
       showToast(`Welcome back, ${u.name}!`, "success");
     }
   };
