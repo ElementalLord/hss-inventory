@@ -12,15 +12,18 @@ const SEED_USERS = [
 
 const CATEGORIES = ["Ghosh", "Sharirikh", "Kitchen", "Decoration", "Food", "Audio/Visual", "Sports", "Office", "Other"]; 
 
+const randQty = () => Math.floor(Math.random() * 20) + 1;
+
 const SEED_ITEMS = [
-  { id: "i1", name: "Dhol", quantity: 3, category: "Ghosh", location: "Storage Room A", image: "🥁" },
-  { id: "i2", name: "Tutari (Bugle)", quantity: 5, category: "Ghosh", location: "Storage Room A", image: "🎺" },
-  { id: "i3", name: "Serving Pots (Large)", quantity: 8, category: "Kitchen", location: "Kitchen Cabinet 1", image: "🫕" },
-  { id: "i4", name: "Steel Plates", quantity: 50, category: "Kitchen", location: "Kitchen Cabinet 2", image: "🍽️" },
-  { id: "i5", name: "Decorative Diyas", quantity: 30, category: "Decoration", location: "Box D-3", image: "🪔" },
-  { id: "i6", name: "Marigold Garlands", quantity: 20, category: "Decoration", location: "Fridge / Fresh Storage", image: "🌸" },
-  { id: "i7", name: "Projector", quantity: 2, category: "Audio/Visual", location: "AV Closet", image: "📽️" },
-  { id: "i8", name: "Folding Tables", quantity: 12, category: "Office", location: "Garage Section B", image: "🪑" },
+  { id: "i1", name: "Dand", quantity: randQty(), category: "Sharirikh", location: "Sharirikh Rack", image: "🪵" },
+  { id: "i2", name: "Vamshi", quantity: randQty(), category: "Ghosh", location: "Ghosh Storage", image: "🪘" },
+  { id: "i3", name: "Anak", quantity: randQty(), category: "Ghosh", location: "Ghosh Storage", image: "🎺" },
+  { id: "i4", name: "Venu", quantity: randQty(), category: "Ghosh", location: "Ghosh Storage", image: "🎶" },
+  { id: "i5", name: "Banner", quantity: randQty(), category: "Decoration", location: "Decoration Closet", image: "🎉" },
+  { id: "i6", name: "Spoons", quantity: randQty(), category: "Food", location: "Kitchen Cabinet 1", image: "🥄" },
+  { id: "i7", name: "Forks", quantity: randQty(), category: "Food", location: "Kitchen Cabinet 1", image: "🍴" },
+  { id: "i8", name: "Rope", quantity: randQty(), category: "Sports", location: "Sports Bin", image: "🧵" },
+  { id: "i9", name: "Balls", quantity: randQty(), category: "Sports", location: "Sports Bin", image: "⚽" },
 ];
 
 const SEED_TRANSACTIONS = [
