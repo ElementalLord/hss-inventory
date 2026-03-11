@@ -404,12 +404,12 @@ export default function App() {
   const showToast = (msg, type = "success") => setToast({ msg, type });
   useEffect(() => { loadData(); }, []);
 
-  // Ensure admins always see the default inventory items.
+  // Ensure all users always see the default inventory items when the list is empty.
   useEffect(() => {
-    if (currentUser?.role === "admin" && items.length === 0) {
+    if (items.length === 0) {
       setItems(SEED_ITEMS);
     }
-  }, [currentUser, items.length]);
+  }, [items.length]);
 
 const loadData = async () => {
   try {
@@ -573,7 +573,7 @@ const loadData = async () => {
       setCurrentUser(u); setAuthStep("pending");
     } else {
       setCurrentUser(u);
-      setView(u.role === "admin" ? "inventory" : "dashboard");
+      setView("inventory");
       showToast(`Welcome back, ${u.name}!`, "success");
     }
   };
