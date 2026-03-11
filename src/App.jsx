@@ -8,15 +8,9 @@ const SEED_USERS = [
   { id: "u2", name: "Sameer", email: "sameer@hss.org", role: "admin", status: "approved", expectedOtp: "781204" },
   { id: "u3", name: "Ketul", email: "ketul@hss.org", role: "admin", status: "approved", expectedOtp: "630915" },
   { id: "u4", name: "Pradeep", email: "pradeep@hss.org", role: "admin", status: "approved", expectedOtp: "254670" },
-  { id: "u5", name: "Admin1", email: "admin1@hss.org", role: "admin", status: "approved", expectedOtp: "108432" },
-  { id: "u6", name: "Admin2", email: "admin2@hss.org", role: "admin", status: "approved", expectedOtp: "396520" },
-  { id: "u7", name: "Admin3", email: "admin3@hss.org", role: "admin", status: "approved", expectedOtp: "875103" },
-  { id: "u8", name: "Admin4", email: "admin4@hss.org", role: "admin", status: "approved", expectedOtp: "542681" },
-  { id: "u9", name: "Admin5", email: "admin5@hss.org", role: "admin", status: "approved", expectedOtp: "219407" },
-  { id: "u10", name: "Admin6", email: "admin6@hss.org", role: "admin", status: "approved", expectedOtp: "760195" },
 ];
 
-const CATEGORIES = ["Ghosh", "Kitchen", "Decoration", "Food", "Audio/Visual", "Sports", "Office", "Other"];
+const CATEGORIES = ["Ghosh", "Sharirikh", "Kitchen", "Decoration", "Food", "Audio/Visual", "Sports", "Office", "Other"]; 
 
 const SEED_ITEMS = [
   { id: "i1", name: "Dhol", quantity: 3, category: "Ghosh", location: "Storage Room A", image: "🥁" },
@@ -408,47 +402,57 @@ export default function App() {
   useEffect(() => { loadData(); }, []);
 
 const loadData = async () => {
-  const [{ data: u }, { data: it }, { data: tx }] = await Promise.all([
-    supabase.from('users').select('*'),
-    supabase.from('items').select('*'),
-    supabase.from('transactions').select('*'),
-  ]);
-  if (u?.length) {
-    setUsers(prev => {
-      const merged = [...prev];
-      u.forEach(dbUser => {
-        const idx = merged.findIndex(x => x.email.toLowerCase() === dbUser.email.toLowerCase());
-        if (idx > -1) {
-          merged[idx] = { ...merged[idx], ...dbUser };
-        } else {
-          merged.push(dbUser);
-        }
-      });
-      return merged;
-    });
+  try {
+    const [{ data: u }, { data: it }, { data: tx }] = await Promise.all([
+      supabase.from('users').select('*'),
+      supabase.from('items').select('*'),
+      supabase.from('transactions').select('*'),
+    ]);
 
-    // Ensure seeded admin accounts exist in the DB (so they persist and can be fetched later)
-    const existingEmails = u.map(x => x.email.toLowerCase());
-    const missingSeedUsers = SEED_USERS.filter(su => !existingEmails.includes(su.email.toLowerCase()));
-    if (missingSeedUsers.length) {
-      await supabase.from('users').insert(missingSeedUsers.map(u => ({
-        id: u.id, name: u.name, email: u.email, role: u.role, status: u.status,
-      })));
+    if (u?.length) {
       setUsers(prev => {
-        const have = prev.map(x => x.email.toLowerCase());
-        const toAdd = missingSeedUsers.filter(su => !have.includes(su.email.toLowerCase()));
-        return [...prev, ...toAdd];
+        const merged = [...prev];
+        u.forEach(dbUser => {
+          const idx = merged.findIndex(x => x.email.toLowerCase() === dbUser.email.toLowerCase());
+          if (idx > -1) {
+            merged[idx] = { ...merged[idx], ...dbUser };
+          } else {
+            merged.push(dbUser);
+          }
+        });
+        return merged;
       });
+
+      // Persist seeded admins to the DB so they can be fetched later.
+      try {
+        const existingEmails = u.map(x => x.email.toLowerCase());
+        const missingSeedUsers = SEED_USERS.filter(su => !existingEmails.includes(su.email.toLowerCase()));
+        if (missingSeedUsers.length) {
+          await supabase.from('users').insert(missingSeedUsers.map(u => ({
+            id: u.id, name: u.name, email: u.email, role: u.role, status: u.status,
+          })));
+          setUsers(prev => {
+            const have = prev.map(x => x.email.toLowerCase());
+            const toAdd = missingSeedUsers.filter(su => !have.includes(su.email.toLowerCase()));
+            return [...prev, ...toAdd];
+          });
+        }
+      } catch (err) {
+        console.warn("Unable to persist seeded admins to Supabase:", err);
+      }
     }
+
+    if (it?.length) setItems(it);
+    if (tx?.length) setTransactions(tx.map(t => ({
+      id: t.id, itemId: t.item_id, itemName: t.item_name,
+      quantity: t.quantity, checkedOutBy: t.checked_out_by,
+      checkedOutByName: t.checked_out_by_name, checkOutTime: t.check_out_time,
+      checkedInBy: t.checked_in_by, checkedInByName: t.checked_in_by_name,
+      checkInTime: t.check_in_time, status: t.status,
+    })));
+  } catch (err) {
+    console.warn("Failed to load data from Supabase:", err);
   }
-  if (it?.length) setItems(it);
-  if (tx?.length) setTransactions(tx.map(t => ({
-    id: t.id, itemId: t.item_id, itemName: t.item_name,
-    quantity: t.quantity, checkedOutBy: t.checked_out_by,
-    checkedOutByName: t.checked_out_by_name, checkOutTime: t.check_out_time,
-    checkedInBy: t.checked_in_by, checkedInByName: t.checked_in_by_name,
-    checkInTime: t.check_in_time, status: t.status,
-  })));
 };
 
   // ── Derived ──
