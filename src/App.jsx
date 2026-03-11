@@ -388,7 +388,7 @@ function Modal({ title, onClose, footer, children }) {
 export default function App() {
   const [users, setUsers] = useState(SEED_USERS);
   const [items, setItems] = useState(SEED_ITEMS);
-  const [transactions, setTransactions] = useState(SEED_TRANSACTIONS);
+  const [transactions, setTransactions] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [view, setView] = useState("dashboard");
   const [authStep, setAuthStep] = useState("login"); // login | register | otp | pending
@@ -403,6 +403,13 @@ export default function App() {
 
   const showToast = (msg, type = "success") => setToast({ msg, type });
   useEffect(() => { loadData(); }, []);
+
+  // Ensure admins always see the default inventory items.
+  useEffect(() => {
+    if (currentUser?.role === "admin" && items.length === 0) {
+      setItems(SEED_ITEMS);
+    }
+  }, [currentUser, items.length]);
 
 const loadData = async () => {
   try {
@@ -640,7 +647,6 @@ const handleCheckIn = async (txId) => {
   const navItems = [
     { id: "dashboard", icon: "🏠", label: "Dashboard" },
     { id: "inventory", icon: "📦", label: "Inventory" },
-    { id: "checkout", icon: "↗️", label: "Check Out" },
     { id: "checkin", icon: "↙️", label: "Check In" },
     { id: "history", icon: "📋", label: "History" },
     ...(currentUser?.role === "admin" ? [
@@ -985,54 +991,6 @@ const handleCheckIn = async (txId) => {
           )}
 
           {/* ── Check Out ── */}
-          {view === "checkout" && (
-            <>
-              <div className="page-header">
-                <div className="page-header-left">
-                  <h2>Check Out Items</h2>
-                  <p>Select an item to borrow from inventory</p>
-                </div>
-              </div>
-              <div className="page-body">
-                <div className="toolbar section-gap">
-                  <div className="search-wrap">
-                    <span className="search-icon">🔍</span>
-                    <input type="text" placeholder="Search items…" value={search} onChange={e => setSearch(e.target.value)} />
-                  </div>
-                  <select className="filter-select" value={catFilter} onChange={e => setCatFilter(e.target.value)}>
-                    <option>All</option>
-                    {CATEGORIES.map(c => <option key={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div className="items-grid">
-                  {filteredItems.map(item => {
-                    const totalOut = transactions.filter(t => t.itemId === item.id && t.status === "out").reduce((s, t) => s + t.quantity, 0);
-                    const available = item.quantity - totalOut;
-                    return (
-                      <div key={item.id} className={`item-card ${available < 1 ? "disabled" : ""}`} style={available < 1 ? { opacity: 0.5 } : {}}>
-                        <span className="item-card-emoji">{item.image}</span>
-                        <div className="item-card-name">{item.name}</div>
-                        <div className="item-card-meta">
-                          <span className="badge badge-cat">{item.category}</span>
-                          <span className="tag">📍 {item.location}</span>
-                        </div>
-                        <div>
-                          <div className="item-card-qty">{available}</div>
-                          <div className="item-card-qty-label">Available of {item.quantity}</div>
-                        </div>
-                        <div className="item-card-actions">
-                          <button className="btn btn-sm btn-primary" disabled={available < 1}
-                            onClick={() => setModal({ type: "checkout", item })}>
-                            {available < 1 ? "Unavailable" : "Check Out →"}
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </>
-          )}
 
           {/* ── Check In ── */}
           {view === "checkin" && (
