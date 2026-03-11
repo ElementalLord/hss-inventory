@@ -647,7 +647,6 @@ const handleCheckIn = async (txId) => {
   const navItems = [
     { id: "dashboard", icon: "🏠", label: "Dashboard" },
     { id: "inventory", icon: "📦", label: "Inventory" },
-    { id: "checkout", icon: "↗️", label: "Check Out" },
     { id: "checkin", icon: "↙️", label: "Check In" },
     { id: "history", icon: "📋", label: "History" },
     ...(currentUser?.role === "admin" ? [
@@ -965,6 +964,10 @@ const handleCheckIn = async (txId) => {
                           </div>
                         </div>
                         <div className="item-card-actions">
+                          <button className="btn btn-sm btn-primary" disabled={available < 1}
+                            onClick={() => setModal({ type: "checkout", item })}>
+                            {available < 1 ? "Unavailable" : "Check Out"}
+                          </button>
                           {currentUser.role === "admin" && (
                             <button className="btn btn-sm btn-ghost"
                               onClick={() => setModal({ type: "edit-item", item })}>
