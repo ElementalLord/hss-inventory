@@ -3,16 +3,17 @@ import { useState, useEffect, useRef } from "react";
 
 // ── Seed Data ────────────────────────────────────────────────────────────────
 const SEED_USERS = [
-  { id: "u0", name: "Naitik", email: "naitik@hss.org", role: "admin", status: "approved", expectedOtp: "492817" },
-  { id: "u1", name: "Sameer", email: "sameer@hss.org", role: "admin", status: "approved", expectedOtp: "781204" },
-  { id: "u2", name: "Ketul", email: "ketul@hss.org", role: "admin", status: "approved", expectedOtp: "630915" },
-  { id: "u3", name: "Pradeep", email: "pradeep@hss.org", role: "admin", status: "approved", expectedOtp: "254670" },
-  { id: "u4", name: "Admin1", email: "admin1@hss.org", role: "admin", status: "approved", expectedOtp: "108432" },
-  { id: "u5", name: "Admin2", email: "admin2@hss.org", role: "admin", status: "approved", expectedOtp: "396520" },
-  { id: "u6", name: "Admin3", email: "admin3@hss.org", role: "admin", status: "approved", expectedOtp: "875103" },
-  { id: "u7", name: "Admin4", email: "admin4@hss.org", role: "admin", status: "approved", expectedOtp: "542681" },
-  { id: "u8", name: "Admin5", email: "admin5@hss.org", role: "admin", status: "approved", expectedOtp: "219407" },
-  { id: "u9", name: "Admin6", email: "admin6@hss.org", role: "admin", status: "approved", expectedOtp: "760195" },
+  { id: "u0", name: "Admin", email: "admin@hss.org", role: "admin", status: "approved", expectedOtp: "123456" },
+  { id: "u1", name: "Naitik", email: "naitik@hss.org", role: "admin", status: "approved", expectedOtp: "492817" },
+  { id: "u2", name: "Sameer", email: "sameer@hss.org", role: "admin", status: "approved", expectedOtp: "781204" },
+  { id: "u3", name: "Ketul", email: "ketul@hss.org", role: "admin", status: "approved", expectedOtp: "630915" },
+  { id: "u4", name: "Pradeep", email: "pradeep@hss.org", role: "admin", status: "approved", expectedOtp: "254670" },
+  { id: "u5", name: "Admin1", email: "admin1@hss.org", role: "admin", status: "approved", expectedOtp: "108432" },
+  { id: "u6", name: "Admin2", email: "admin2@hss.org", role: "admin", status: "approved", expectedOtp: "396520" },
+  { id: "u7", name: "Admin3", email: "admin3@hss.org", role: "admin", status: "approved", expectedOtp: "875103" },
+  { id: "u8", name: "Admin4", email: "admin4@hss.org", role: "admin", status: "approved", expectedOtp: "542681" },
+  { id: "u9", name: "Admin5", email: "admin5@hss.org", role: "admin", status: "approved", expectedOtp: "219407" },
+  { id: "u10", name: "Admin6", email: "admin6@hss.org", role: "admin", status: "approved", expectedOtp: "760195" },
 ];
 
 const CATEGORIES = ["Ghosh", "Kitchen", "Decoration", "Food", "Audio/Visual", "Sports", "Office", "Other"];
@@ -425,6 +426,20 @@ const loadData = async () => {
       });
       return merged;
     });
+
+    // Ensure seeded admin accounts exist in the DB (so they persist and can be fetched later)
+    const existingEmails = u.map(x => x.email.toLowerCase());
+    const missingSeedUsers = SEED_USERS.filter(su => !existingEmails.includes(su.email.toLowerCase()));
+    if (missingSeedUsers.length) {
+      await supabase.from('users').insert(missingSeedUsers.map(u => ({
+        id: u.id, name: u.name, email: u.email, role: u.role, status: u.status,
+      })));
+      setUsers(prev => {
+        const have = prev.map(x => x.email.toLowerCase());
+        const toAdd = missingSeedUsers.filter(su => !have.includes(su.email.toLowerCase()));
+        return [...prev, ...toAdd];
+      });
+    }
   }
   if (it?.length) setItems(it);
   if (tx?.length) setTransactions(tx.map(t => ({
@@ -467,38 +482,27 @@ const loadData = async () => {
     sendOTP(u);
   };
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     if (!regData.name || !regData.email) { showToast("Please fill in all fields.", "error"); return; }
-    const exists = users.find(x => x.email.toLowerCase() === regData.email.toLowerCase());
+    const emailLower = regData.email.trim().toLowerCase();
+    const exists = users.find(x => x.email.toLowerCase() === emailLower);
     if (exists) { showToast("An account with that email already exists.", "error"); return; }
-    const newUser = { id: uid(), name: regData.name, email: regData.email, role: "user", status: "pending" };
-    setUsers(prev => [...prev, newUser]);
-    sendOTP(newUser);
+
+    const newUser = { id: uid(), name: regData.name.trim(), email: emailLower, role: "user", status: "pending" };
+    const { data: inserted, error } = await supabase.from('users').insert([newUser]).select();
+    if (error) {
+      showToast("Unable to register. Please try again.", "error");
+      return;
+    }
+
+    const userRecord = inserted?.[0] || newUser;
+    setUsers(prev => [...prev, userRecord]);
+    sendOTP(userRecord);
   };
 
   const handleOTPVerify = () => {
     const expected = otpTarget?.expectedOtp || "1234";
     if (otpValue.trim() !== expected) { showToast(`Invalid OTP. Try ${expected} for demo.`, "error"); return; }
-    const u = users.find(x => x.id === otpTarget.id) || otpTarget;
-    if (u.status === "pending") {
-      setCurrentUser(u); setAuthStep("pending");
-    } else {
-      setCurrentUser(u); setView("dashboard");
-      showToast(`Welcome back, ${u.name}!`, "success");
-    }
-  };
-
-  const handleRegister = () => {
-    if (!regData.name || !regData.email) { showToast("Please fill in all fields.", "error"); return; }
-    const exists = users.find(x => x.email.toLowerCase() === regData.email.toLowerCase());
-    if (exists) { showToast("An account with that email already exists.", "error"); return; }
-    const newUser = { id: uid(), name: regData.name, email: regData.email, role: "user", status: "pending" };
-    setUsers(prev => [...prev, newUser]);
-    sendOTP(newUser);
-  };
-
-  const handleOTPVerify = () => {
-    if (otpValue.trim() !== "1234") { showToast("Invalid OTP. Try 1234 for demo.", "error"); return; }
     const u = users.find(x => x.id === otpTarget.id) || otpTarget;
     if (u.status === "pending") {
       setCurrentUser(u); setAuthStep("pending");
@@ -640,7 +644,20 @@ const handleCheckIn = async (txId) => {
                   <button className="link-btn" onClick={() => setAuthStep("register")}>Register here</button>
                 </p>
                 <div className="info-box" style={{ marginTop: 20, marginBottom: 0 }}>
-                  <strong>Demo:</strong> Try <code>admin@hss.org</code> for admin access or <code>priya@example.com</code> for user. OTP is <strong>1234</strong>.
+                  <strong>Demo:</strong> Use any of the following admin accounts:
+                  <ul style={{ margin: "12px 0 0 16px", padding: 0, listStyle: "disc" }}>
+                    <li><code>admin@hss.org</code> (OTP: <strong>123456</strong>)</li>
+                    <li><code>naitik@hss.org</code> (OTP: <strong>492817</strong>)</li>
+                    <li><code>sameer@hss.org</code> (OTP: <strong>781204</strong>)</li>
+                    <li><code>ketul@hss.org</code> (OTP: <strong>630915</strong>)</li>
+                    <li><code>pradeep@hss.org</code> (OTP: <strong>254670</strong>)</li>
+                    <li><code>admin1@hss.org</code> (OTP: <strong>108432</strong>)</li>
+                    <li><code>admin2@hss.org</code> (OTP: <strong>396520</strong>)</li>
+                    <li><code>admin3@hss.org</code> (OTP: <strong>875103</strong>)</li>
+                    <li><code>admin4@hss.org</code> (OTP: <strong>542681</strong>)</li>
+                    <li><code>admin5@hss.org</code> (OTP: <strong>219407</strong>)</li>
+                    <li><code>admin6@hss.org</code> (OTP: <strong>760195</strong>)</li>
+                  </ul>
                 </div>
               </>
             )}
