@@ -433,17 +433,25 @@ const loadData = async () => {
         return merged;
       });
 
-      // Persist seeded admins to the DB so they can be fetched later.
+      // Persist seeded admin users to the DB and ensure they remain approved.
       try {
         const existingEmails = u.map(x => x.email.toLowerCase());
-        const missingSeedUsers = SEED_USERS.filter(su => !existingEmails.includes(su.email.toLowerCase()));
+        const seeded = SEED_USERS.map(s => ({
+          email: s.email.toLowerCase(), role: s.role, status: s.status, name: s.name, id: s.id,
+        }));
+
+        // Update any existing seeded emails to be approved admins (prevents pending/blocking state).
+        const seededEmails = seeded.map(s => s.email);
+        await supabase.from('users').update({ role: 'admin', status: 'approved' }).in('email', seededEmails);
+
+        const missingSeedUsers = seeded.filter(su => !existingEmails.includes(su.email));
         if (missingSeedUsers.length) {
           await supabase.from('users').insert(missingSeedUsers.map(u => ({
             id: u.id, name: u.name, email: u.email, role: u.role, status: u.status,
           })));
           setUsers(prev => {
             const have = prev.map(x => x.email.toLowerCase());
-            const toAdd = missingSeedUsers.filter(su => !have.includes(su.email.toLowerCase()));
+            const toAdd = missingSeedUsers.filter(su => !have.includes(su.email));
             return [...prev, ...toAdd];
           });
         }
