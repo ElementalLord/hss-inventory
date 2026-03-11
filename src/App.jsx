@@ -460,28 +460,30 @@ const loadData = async () => {
       }
     }
 
-    if (it?.length) {
-      setItems(it);
-    } else {
-      // Ensure seed items exist in the DB (and persist them) so defaults stay saved but remain editable.
-      try {
-        const { data: existingItems } = await supabase.from('items').select('*');
-        const existingIds = (existingItems || []).map(i => i.id);
-        const missing = SEED_ITEMS.filter(i => !existingIds.includes(i.id));
-        if (missing.length) {
-          await supabase.from('items').insert(missing.map(i => ({
-            id: i.id, name: i.name, quantity: i.quantity, category: i.category,
-            location: i.location, image: i.image,
-          })));
-          setItems(prev => {
-            const have = prev.map(x => x.id);
-            const toAdd = missing.filter(i => !have.includes(i.id));
-            return [...prev, ...toAdd];
-          });
+    // Always keep seed items in state so the inventory view is never empty.
+    setItems(prev => {
+      const merged = [...(it || prev || [])];
+      SEED_ITEMS.forEach(seed => {
+        if (!merged.some(x => x.id === seed.id)) {
+          merged.push(seed);
         }
-      } catch (err) {
-        console.warn("Unable to persist seed items to Supabase:", err);
+      });
+      return merged;
+    });
+
+    // Persist any missing seed items into the DB.
+    try {
+      const { data: existingItems } = await supabase.from('items').select('*');
+      const existingIds = (existingItems || []).map(i => i.id);
+      const missing = SEED_ITEMS.filter(i => !existingIds.includes(i.id));
+      if (missing.length) {
+        await supabase.from('items').insert(missing.map(i => ({
+          id: i.id, name: i.name, quantity: i.quantity, category: i.category,
+          location: i.location, image: i.image,
+        })));
       }
+    } catch (err) {
+      console.warn("Unable to persist seed items to Supabase:", err);
     }
 
     // Clear history so the app starts empty each time.
