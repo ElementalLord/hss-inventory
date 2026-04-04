@@ -241,6 +241,7 @@ const css = `
   .badge-in { background: #E8F5EE; color: #1E7A45; }
   .badge-pending { background: #FFF8E0; color: #A07000; }
   .badge-approved { background: #E8F5EE; color: #1E7A45; }
+  .badge-rejected { background: #FDECEA; color: #A91E1E; }
   .badge-overdue { background: #FDECEA; color: #A91E1E; }
   .badge-cat { background: var(--saffron-pale); color: var(--saffron); }
 
@@ -266,13 +267,26 @@ const css = `
   .item-card-actions { display: flex; gap: 8px; margin-top: 14px; border-top: 1px solid var(--border); padding-top: 14px; }
 
   /* ── Search / Filter ── */
-  .toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-  .search-wrap { position: relative; flex: 1; min-width: 200px; }
-  .search-wrap input { padding-left: 36px; }
-  .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 14px; }
-  .filter-select { padding: 10px 14px; border: 1.5px solid var(--border); border-radius: var(--radius);
-    font-family: 'DM Sans'; font-size: 14px; background: var(--white); color: var(--text); outline: none; cursor: pointer; }
-  .filter-select:focus { border-color: var(--saffron); }
+  .toolbar { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; justify-content: space-between; }
+  .search-wrap { position: relative; flex: 4; min-width: 420px; max-width: 100%; }
+  .search-wrap input {
+    width: 100%; height: 58px; padding: 0 48px; padding-left: 52px;
+    border: 1.8px solid var(--border); border-radius: 999px;
+    background: rgba(245, 240, 234, 0.95); font-size: 16px;
+    font-weight: 500; color: var(--text); box-shadow: inset 0 2px 6px rgba(0,0,0,0.06);
+    transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+  }
+  .search-wrap input:focus {
+    border-color: var(--saffron); box-shadow: 0 0 0 4px rgba(232,112,42,0.12); transform: translateY(-1px);
+  }
+  .search-wrap input::placeholder { color: var(--text-muted); font-size: 15px; }
+  .search-icon { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 18px; }
+  .search-clear { position: absolute; right: 18px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 18px; cursor: pointer; }
+  .search-clear:hover { color: var(--text); }
+  .filter-select { padding: 12px 16px; border: 1.8px solid var(--border); border-radius: 999px;
+    font-family: 'DM Sans'; font-size: 15px; background: var(--white); color: var(--text); outline: none; cursor: pointer; min-width: 220px; }
+  .filter-select:focus { border-color: var(--saffron); box-shadow: 0 0 0 3px rgba(232,112,42,0.12); }
+
 
   /* ── Modal ── */
   .modal-overlay {
@@ -535,9 +549,43 @@ export default function App() {
       })
       .subscribe();
 
+    // Subscribe to users changes
+    const usersSubscription = supabase
+      .channel('users-channel')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          setUsers(prev => {
+            if (prev.some(u => u.id === payload.new.id)) return prev;
+            return [...prev, payload.new];
+          });
+        } else if (payload.eventType === 'UPDATE') {
+          setUsers(prev => prev.map(u => u.id === payload.new.id ? payload.new : u));
+          // If current user updated, update currentUser
+          if (currentUser && payload.new.id === currentUser.id) {
+            setCurrentUser(payload.new);
+            if (payload.new.status === 'approved') {
+              setAuthStep('login');
+              setView('inventory');
+              showToast(`Welcome, ${payload.new.name}!`, 'success');
+            } else if (payload.new.status === 'rejected') {
+              setAuthStep('login');
+              showToast('Your account has been rejected.', 'error');
+            }
+          }
+        } else if (payload.eventType === 'DELETE') {
+          setUsers(prev => prev.filter(u => u.id !== payload.old.id));
+          if (currentUser && payload.old.id === currentUser.id) {
+            setCurrentUser(null);
+            setAuthStep('login');
+          }
+        }
+      })
+      .subscribe();
+
     return () => {
       itemsSubscription.unsubscribe();
       txSubscription.unsubscribe();
+      usersSubscription.unsubscribe();
     };
   }, []);
 
@@ -550,13 +598,6 @@ const loadData = async () => {
     ]);
 
     if (u?.length) {
-      // Remove unwanted admin if it exists in the DB
-      try {
-        await supabase.from('users').delete().eq('email', 'naitik.s.patel10@gmail.com');
-      } catch (err) {
-        console.warn("Unable to remove unwanted admin user:", err);
-      }
-
       setUsers(prev => {
         const merged = [...prev];
         u.forEach(dbUser => {
@@ -715,28 +756,39 @@ const handleApproveUser = async (userId) => {
   showToast("User approved!", "success");
 };
 
-  const handleRejectUser = (userId) => {
-    setUsers(prev => prev.filter(u => u.id !== userId));
-    showToast("User removed.", "error");
+  const handleRejectUser = async (userId) => {
+    await supabase.from('users').update({ status: "rejected" }).eq('id', userId);
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: "rejected" } : u));
+    showToast("User rejected.", "error");
   };
 
   // ── Items ──
 const handleAddItem = async (data) => {
   const newItem = { id: uid(), ...data, image: data.image || "📦" };
-  const { error } = await supabase.from('items').insert({
+  const insertData = {
     id: newItem.id,
     name: newItem.name,
     quantity: newItem.quantity,
     category: newItem.category,
-    siteId: newItem.siteId,
-    zoneId: newItem.zoneId,
-    locationDescription: newItem.locationDescription,
     image: newItem.image,
-  });
-  if (!error) {
-    setItems(prev => [...prev, newItem]);
-    showToast("Item added!", "success");
-  } else {
+  };
+  
+  // Only include location fields if they have values
+  if (newItem.siteId) insertData.siteId = newItem.siteId;
+  if (newItem.zoneId) insertData.zoneId = newItem.zoneId;
+  if (newItem.locationDescription) insertData.locationDescription = newItem.locationDescription;
+  
+  try {
+    const { error } = await supabase.from('items').insert(insertData);
+    if (!error) {
+      setItems(prev => [...prev, newItem]);
+      showToast("Item added!", "success");
+    } else {
+      console.error("Insert error:", error);
+      showToast("Failed to add item: " + error.message, "error");
+    }
+  } catch (err) {
+    console.error("Insert exception:", err);
     showToast("Failed to add item.", "error");
   }
   setModal(null);
@@ -747,16 +799,25 @@ const handleEditItem = async (data) => {
     name: data.name,
     quantity: data.quantity,
     category: data.category,
-    siteId: data.siteId,
-    zoneId: data.zoneId,
-    locationDescription: data.locationDescription,
     image: data.image,
   };
-  const { error } = await supabase.from('items').update(updateData).eq('id', data.id);
-  if (!error) {
-    setItems(prev => prev.map(it => it.id === data.id ? { ...it, ...updateData } : it));
-    showToast("Item updated!", "success");
-  } else {
+  
+  // Only include location fields if they have values (to avoid errors if columns don't exist)
+  if (data.siteId) updateData.siteId = data.siteId;
+  if (data.zoneId) updateData.zoneId = data.zoneId;
+  if (data.locationDescription !== undefined) updateData.locationDescription = data.locationDescription;
+  
+  try {
+    const { error } = await supabase.from('items').update(updateData).eq('id', data.id);
+    if (!error) {
+      setItems(prev => prev.map(it => it.id === data.id ? { ...it, ...updateData } : it));
+      showToast("Item updated!", "success");
+    } else {
+      console.error("Update error:", error);
+      showToast("Failed to update item: " + error.message, "error");
+    }
+  } catch (err) {
+    console.error("Update exception:", err);
     showToast("Failed to update item.", "error");
   }
   setModal(null);
@@ -1112,6 +1173,7 @@ const handleCheckIn = async (txId) => {
                   <div className="search-wrap">
                     <span className="search-icon">🔍</span>
                     <input type="text" placeholder="Search items or location…" value={search} onChange={e => setSearch(e.target.value)} />
+                    {search && <span className="search-clear" onClick={() => setSearch("")}>✕</span>}
                   </div>
                   <select className="filter-select" value={catFilter} onChange={e => setCatFilter(e.target.value)}>
                     <option>All</option>
@@ -1123,7 +1185,7 @@ const handleCheckIn = async (txId) => {
                     const outTxs = transactions.filter(t => t.itemId === item.id && t.status === "out");
                     const totalOut = outTxs.reduce((s, t) => s + t.quantity, 0);
                     const available = item.quantity - totalOut;
-                    const zone = SITES.find(s => s.id === item.siteId)?.zones.find(z => z.id === item.zoneId);
+                    const zone = item.siteId && item.zoneId ? SITES.find(s => s.id === item.siteId)?.zones.find(z => z.id === item.zoneId) : null;
                     return (
                       <div key={item.id} className="item-card">
                         {isImageSource(item.image) ? (
@@ -1135,9 +1197,9 @@ const handleCheckIn = async (txId) => {
                         <div className="item-card-meta">
                           <span className="badge badge-cat">{item.category}</span>
                         </div>
-                        <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14, lineHeight: 1.4 }}>
-                          <div><strong>📍 {zone?.name}</strong></div>
-                          <div>{item.locationDescription}</div>
+                        <div style={{ fontSize: 13, color: "var(--text)", marginBottom: 14, lineHeight: 1.4, fontWeight: 500 }}>
+                          <div><strong>📍 {zone?.name || 'Location not set'}</strong></div>
+                          <div style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 400 }}>{item.locationDescription || 'No description available'}</div>
                         </div>
                         <div style={{ display: "flex", gap: 20 }}>
                           <div>
@@ -1210,6 +1272,7 @@ const handleCheckIn = async (txId) => {
                   <div className="search-wrap">
                     <span className="search-icon">🔍</span>
                     <input type="text" placeholder="Search items…" value={search} onChange={e => setSearch(e.target.value)} />
+                    {search && <span className="search-clear" onClick={() => setSearch("")}>✕</span>}
                   </div>
                   <select className="filter-select" value={catFilter} onChange={e => setCatFilter(e.target.value)}>
                     <option>All</option>
@@ -1393,7 +1456,7 @@ const handleCheckIn = async (txId) => {
                   <div className="card-header"><h3>All Users</h3></div>
                   <div className="card-body">
                     <table className="tbl">
-                      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th></tr></thead>
+                      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
                       <tbody>
                         {users.map(u => (
                           <tr key={u.id}>
@@ -1404,6 +1467,11 @@ const handleCheckIn = async (txId) => {
                             <td style={{ color: "var(--text-muted)" }}>{u.email}</td>
                             <td><span className="tag">{u.role}</span></td>
                             <td><span className={`badge badge-${u.status}`}>{u.status}</span></td>
+                            <td>
+                              {u.role !== "admin" && (
+                                <button className="btn btn-sm btn-danger" onClick={() => handleRejectUser(u.id)}>Remove</button>
+                              )}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -1579,7 +1647,12 @@ function AddItemModal({ onClose, onSave }) {
 
 // ── Edit Item Modal ───────────────────────────────────────────────────────────
 function EditItemModal({ item, onClose, onSave, onDelete }) {
-  const [form, setForm] = useState({ ...item });
+  const [form, setForm] = useState({ 
+    ...item, 
+    siteId: item.siteId || SITES[0].id,
+    zoneId: item.zoneId || SITES[0].zones[0]?.id || "",
+    locationDescription: item.locationDescription || ""
+  });
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showZoom, setShowZoom] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
