@@ -1,40 +1,37 @@
 import { supabase } from './supabase.js'
 import { useState, useEffect, useRef } from "react";
 
-// ── Locations & Sites ────────────────────────────────────────────────────────
+// ── Locations & Sites (Vibhags & Shakhas) ────────────────────────────────────
 const SITES = [
   {
     id: "site1",
-    name: "North Site",
-    zone: "Primary Bhandar",
+    name: "North Houston Vibhag",
+    zone: "Northern Region",
     zones: [
-      { id: "z1", name: "Ghosh Section", description: "Music instruments storage" },
-      { id: "z2", name: "Sharirikh Section", description: "Physical training equipment" },
-      { id: "z3", name: "Kitchen Storage", description: "Utensils and food items" },
-      { id: "z4", name: "Decoration Closet", description: "Banners, decorations, seasonal items" },
+      { id: "z1", name: "Abhimanyu Shakha", description: "Abhimanyu branch inventory" },
+      { id: "z2", name: "Kailash Shakha", description: "Kailash branch inventory" },
+      { id: "z3", name: "Shivshakti Shakha", description: "Shivshakti branch inventory" },
+      { id: "z4", name: "Vayu Shakha", description: "Vayu branch inventory" },
+      { id: "z5", name: "Sooraj Shakha", description: "Sooraj branch inventory" },
+      { id: "z6", name: "Adisankrachariya Shakha", description: "Adisankrachariya branch inventory" },
+      { id: "z7", name: "Texas Hindu Campsite", description: "Hindu campsite inventory" },
     ]
   },
   {
     id: "site2",
-    name: "South Site",
-    zone: "Secondary Location",
-    zones: [
-      { id: "z5", name: "Main Storage", description: "General inventory storage" },
-      { id: "z6", name: "Sports Equipment", description: "Balls, ropes, and sports gear" },
-      { id: "z7", name: "Office Supplies", description: "Stationery and office items" },
-    ]
+    name: "South Houston Vibhag",
+    zone: "Southern Region",
+    zones: []
   },
 ];
 
 const SEED_USERS = [
-  { id: "u0", name: "Admin", email: "admin@hss.org", role: "admin", status: "approved", expectedOtp: "123456" },
-  { id: "u1", name: "Naitik", email: "naitik@hss.org", role: "admin", status: "approved", expectedOtp: "492817" },
-  { id: "u2", name: "Sameer", email: "sameer@hss.org", role: "admin", status: "approved", expectedOtp: "781204" },
-  { id: "u3", name: "Ketul", email: "ketul@hss.org", role: "admin", status: "approved", expectedOtp: "630915" },
-  { id: "u4", name: "Pradeep", email: "pradeep@hss.org", role: "admin", status: "approved", expectedOtp: "254670" },
+  { id: "u_admin1", name: "System Admin", email: "admin@hss.org", role: "admin", status: "approved", expectedOtp: "123456" },
 ];
 
-const CATEGORIES = ["Ghosh", "Sharirikh", "Kitchen", "Decoration", "Food", "Audio/Visual", "Sports", "Office", "Other"]; 
+const CATEGORIES = ["Ghosh", "Sharirikh", "Kitchen", "Decoration", "Food", "Audio/Visual", "Sports", "Office", "Camping", "Other"]; 
+
+const EMOJI_PICKER = ["📦", "🎺", "🪘", "🎶", "🎉", "🥄", "🍴", "🧵", "⚽", "🪑", "📚", "✏️", "🎓", "🏃", "⛹️", "🧘", "🍳", "🥘", "🎂", "🍕", "🏆", "🎁", "🕯️", "💡", "🔧", "🧰", "📺", "🎮", "🎥", "📷", "🎤", "🎧", "🪕", "🎼", "🏮", "🪔", "👕", "👖", "👗", "🧥", "🎩", "🧢", "🎒", "🛶", "🏕️", "⛺", "🧺", "🧯", "🧻", "🧼", "🪣", "🔌", "🖥️", "🖨️", "📺", "📻", "🥣", "🥢", "🥡", "🍹", "🔔", "🪁", "🎯", "🧢", "🧦", "🩳", "👟", "🧥", "📂", "📎", "🗂️"]; 
 
 const randQty = () => Math.floor(Math.random() * 20) + 1;
 
@@ -42,12 +39,12 @@ const SEED_ITEMS = [
   { id: "i1", name: "Dand", quantity: randQty(), category: "Sharirikh", siteId: "site1", zoneId: "z2", locationDescription: "Shelf 1, Top Row", image: "🪵" },
   { id: "i2", name: "Vamshi", quantity: randQty(), category: "Ghosh", siteId: "site1", zoneId: "z1", locationDescription: "Cabinet A, Left side", image: "🪘" },
   { id: "i3", name: "Anak", quantity: randQty(), category: "Ghosh", siteId: "site1", zoneId: "z1", locationDescription: "Cabinet A, Right side", image: "🎺" },
-  { id: "i4", name: "Venu", quantity: randQty(), category: "Ghosh", siteId: "site1", zoneId: "z1", locationDescription: "Shelf 2, Middle Row", image: "🎶" },
+  { id: "i4", name: "Venu", quantity: randQty(), category: "Ghosh", siteId: "site1", zoneId: "z3", locationDescription: "Shelf 2, Middle Row", image: "🎶" },
   { id: "i5", name: "Banner", quantity: randQty(), category: "Decoration", siteId: "site1", zoneId: "z4", locationDescription: "Hanging rod, Back wall", image: "🎉" },
-  { id: "i6", name: "Spoons", quantity: randQty(), category: "Food", siteId: "site1", zoneId: "z3", locationDescription: "Drawer 1, Kitchen counter", image: "🥄" },
-  { id: "i7", name: "Forks", quantity: randQty(), category: "Food", siteId: "site1", zoneId: "z3", locationDescription: "Drawer 2, Kitchen counter", image: "🍴" },
-  { id: "i8", name: "Rope", quantity: randQty(), category: "Sports", siteId: "site2", zoneId: "z6", locationDescription: "Bin A, Top shelf", image: "🧵" },
-  { id: "i9", name: "Balls", quantity: randQty(), category: "Sports", siteId: "site2", zoneId: "z6", locationDescription: "Bin B, Lower shelf", image: "⚽" },
+  { id: "i6", name: "Spoons", quantity: randQty(), category: "Food", siteId: "site1", zoneId: "z5", locationDescription: "Drawer 1, Storage", image: "🥄" },
+  { id: "i7", name: "Forks", quantity: randQty(), category: "Food", siteId: "site1", zoneId: "z5", locationDescription: "Drawer 2, Storage", image: "🍴" },
+  { id: "i8", name: "Rope", quantity: randQty(), category: "Sports", siteId: "site1", zoneId: "z7", locationDescription: "Bin A, Top shelf", image: "🧵" },
+  { id: "i9", name: "Balls", quantity: randQty(), category: "Sports", siteId: "site1", zoneId: "z7", locationDescription: "Bin B, Lower shelf", image: "⚽" },
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -58,6 +55,8 @@ const fmtDate = (iso) => {
 };
 
 const daysAgo = (iso) => Math.floor((Date.now() - new Date(iso)) / 86400000);
+
+const isImageSource = (value) => typeof value === "string" && (value.startsWith("data:") || value.startsWith("http") || value.startsWith("blob:"));
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 
@@ -115,6 +114,8 @@ const css = `
   .auth-logo span { font-size: 12px; color: var(--text-muted); font-family: 'DM Sans', sans-serif; font-weight: 400; display: block; }
   .auth-title { font-size: 28px; color: var(--forest); margin-bottom: 8px; }
   .auth-sub { color: var(--text-muted); font-size: 14px; margin-bottom: 32px; line-height: 1.5; }
+  .otp-code-banner { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; margin-bottom: 18px; padding: 18px 16px; background: #F4F6FF; border: 1px solid rgba(37, 99, 235, 0.15); border-radius: 14px; }
+  .otp-code { font-size: 36px; letter-spacing: 0.18em; font-weight: 700; color: #1D4ED8; }
 
   /* ── Form ── */
   .field { margin-bottom: 18px; }
@@ -250,7 +251,14 @@ const css = `
   }
   .item-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); border-color: var(--saffron); }
   .item-card-emoji { font-size: 32px; margin-bottom: 12px; display: block; }
+  .item-card-photo { margin-bottom: 12px; width: 100%; height: 150px; border-radius: 16px; overflow: hidden; background: var(--warm-gray); display: grid; place-items: center; }
+  .item-card-photo img { width: 100%; height: 100%; object-fit: cover; }
   .item-card-name { font-family: 'Playfair Display', serif; font-size: 17px; color: var(--forest); margin-bottom: 6px; }
+  .zoom-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 1100;
+  }
+  .zoom-content { background: var(--white); border-radius: 18px; padding: 20px; max-width: 92vw; max-height: 92vh; overflow: auto; display: flex; flex-direction: column; align-items: center; }
+  .zoom-content img { max-width: 100%; max-height: 80vh; border-radius: 16px; object-fit: contain; }
   .item-card-meta { font-size: 12px; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
   .item-card-qty { font-size: 24px; font-family: 'Playfair Display', serif; color: var(--saffron); font-weight: 700; }
   .item-card-qty-label { font-size: 11px; color: var(--text-muted); }
@@ -402,13 +410,14 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [modal, setModal] = useState(null);
   const [catFilter, setCatFilter] = useState("All");
-  const [siteFilter, setSiteFilter] = useState(SITES[0].id); // Add site filter
-  const [zoneFilter, setZoneFilter] = useState(SITES[0].zones[0].id); // Add zone filter
+  const [siteFilter, setSiteFilter] = useState("all"); // "all" shows all items
+  const [zoneFilter, setZoneFilter] = useState("all"); // "all" shows all zones
   const [search, setSearch] = useState("");
   const [regData, setRegData] = useState({ name: "", email: "" });
   const [loginEmail, setLoginEmail] = useState("");
   const [otpValue, setOtpValue] = useState("");
   const [otpTarget, setOtpTarget] = useState(null); // user being verified
+  const [otpCountdown, setOtpCountdown] = useState(0);
 
   const showToast = (msg, type = "success") => setToast({ msg, type });
   useEffect(() => { loadData(); }, []);
@@ -419,6 +428,25 @@ export default function App() {
       setItems(SEED_ITEMS);
     }
   }, [items.length]);
+
+  useEffect(() => {
+    if (authStep !== "otp" || !otpTarget?.otpExpiresAt) {
+      setOtpCountdown(0);
+      return;
+    }
+
+    const updateCountdown = () => {
+      const remaining = Math.max(0, Math.ceil((new Date(otpTarget.otpExpiresAt) - new Date()) / 1000));
+      setOtpCountdown(remaining);
+      if (remaining <= 0) {
+        setOtpTarget(prev => prev ? { ...prev, expectedOtp: "", otpExpiresAt: null } : prev);
+      }
+    };
+
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [authStep, otpTarget?.otpExpiresAt]);
 
   // ── Real-time synchronization ──
   useEffect(() => {
@@ -589,12 +617,14 @@ const loadData = async () => {
   const pendingUsers = users.filter(u => u.status === "pending");
 
   // ── Auth ──
-  const sendOTP = (user) => {
-    const otp = user.expectedOtp || Math.floor(100000 + Math.random() * 900000).toString();
-    setOtpTarget({ ...user, expectedOtp: otp });
+  const sendOTP = async (user) => {
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 30 * 1000).toISOString();
+    setOtpTarget({ ...user, expectedOtp: otp, otpExpiresAt: expiresAt });
     setOtpValue("");
     setAuthStep("otp");
-    showToast(`OTP sent to ${user.email} (use ${otp} for demo)`, "success");
+    setOtpCountdown(30);
+    showToast("OTP generated and shown on screen for 30 seconds.", "success");
   };
 
   const handleLogin = () => {
@@ -629,12 +659,17 @@ const loadData = async () => {
 
     const userRecord = inserted?.[0] || newUser;
     setUsers(prev => [...prev, userRecord]);
-    sendOTP(userRecord);
+    await sendOTP(userRecord);
   };
 
-  const handleOTPVerify = () => {
-    const expected = otpTarget?.expectedOtp || "1234";
-    if (otpValue.trim() !== expected) { showToast(`Invalid OTP. Try ${expected} for demo.`, "error"); return; }
+  const handleOTPVerify = async () => {
+    const inputOtp = otpValue.trim();
+    if (!inputOtp) { showToast("Please enter OTP.", "error"); return; }
+
+    const expected = otpTarget?.expectedOtp;
+    if (!expected) { showToast("OTP expired. Generate a new code.", "error"); return; }
+    if (inputOtp !== expected) { showToast("Invalid OTP. Please try again.", "error"); return; }
+
     const u = users.find(x => x.id === otpTarget.id) || otpTarget;
     if (u.status === "pending") {
       setCurrentUser(u); setAuthStep("pending");
@@ -658,7 +693,7 @@ const handleApproveUser = async (userId) => {
 
   // ── Items ──
 const handleAddItem = async (data) => {
-  const newItem = { id: uid(), ...data, image: "📦" };
+  const newItem = { id: uid(), ...data, image: data.image || "📦" };
   const { error } = await supabase.from('items').insert({
     id: newItem.id,
     name: newItem.name,
@@ -686,6 +721,7 @@ const handleEditItem = async (data) => {
     siteId: data.siteId,
     zoneId: data.zoneId,
     locationDescription: data.locationDescription,
+    image: data.image,
   };
   const { error } = await supabase.from('items').update(updateData).eq('id', data.id);
   if (!error) {
@@ -805,20 +841,7 @@ const handleCheckIn = async (txId) => {
                   <button className="link-btn" onClick={() => setAuthStep("register")}>Register here</button>
                 </p>
                 <div className="info-box" style={{ marginTop: 20, marginBottom: 0 }}>
-                  <strong>Demo:</strong> Use any of the following admin accounts:
-                  <ul style={{ margin: "12px 0 0 16px", padding: 0, listStyle: "disc" }}>
-                    <li><code>admin@hss.org</code> (OTP: <strong>123456</strong>)</li>
-                    <li><code>naitik@hss.org</code> (OTP: <strong>492817</strong>)</li>
-                    <li><code>sameer@hss.org</code> (OTP: <strong>781204</strong>)</li>
-                    <li><code>ketul@hss.org</code> (OTP: <strong>630915</strong>)</li>
-                    <li><code>pradeep@hss.org</code> (OTP: <strong>254670</strong>)</li>
-                    <li><code>admin1@hss.org</code> (OTP: <strong>108432</strong>)</li>
-                    <li><code>admin2@hss.org</code> (OTP: <strong>396520</strong>)</li>
-                    <li><code>admin3@hss.org</code> (OTP: <strong>875103</strong>)</li>
-                    <li><code>admin4@hss.org</code> (OTP: <strong>542681</strong>)</li>
-                    <li><code>admin5@hss.org</code> (OTP: <strong>219407</strong>)</li>
-                    <li><code>admin6@hss.org</code> (OTP: <strong>760195</strong>)</li>
-                  </ul>
+                  <strong>New User?</strong> Register above and wait for admin approval to access the system.
                 </div>
               </>
             )}
@@ -849,14 +872,20 @@ const handleCheckIn = async (txId) => {
             {authStep === "otp" && (
               <>
                 <h2 className="auth-title">Enter OTP</h2>
-                <p className="auth-sub">A 6-digit code was sent to <strong>{otpTarget?.email}</strong>. (Demo: use <strong>1 2 3 4</strong>)</p>
+                <p className="auth-sub">A 6-digit code is shown below for 30 seconds. Enter it below to continue.</p>
+                <div className="otp-code-banner">
+                  <span className="otp-code">{otpTarget?.expectedOtp || "------"}</span>
+                  <div style={{ marginTop: 8, fontSize: 14, color: "var(--text-muted)" }}>
+                    Expires in {otpCountdown} second{otpCountdown === 1 ? "" : "s"}.
+                  </div>
+                </div>
                 <OTPInput value={otpValue} onChange={setOtpValue} />
-                <button className="btn btn-primary btn-full" onClick={handleOTPVerify} disabled={otpValue.trim().length < 4}>
+                <button className="btn btn-primary btn-full" onClick={handleOTPVerify} disabled={otpValue.trim().length < 4 || !otpTarget?.expectedOtp}>
                   Verify & Continue →
                 </button>
                 <p style={{ textAlign: "center", marginTop: 16, fontSize: 13, color: "var(--text-muted)" }}>
-                  Didn't receive it?{" "}
-                  <button className="link-btn" onClick={() => showToast("OTP resent! (Demo: 1234)", "success")}>Resend OTP</button>
+                  Need a new code?{" "}
+                  <button className="link-btn" onClick={() => sendOTP(otpTarget)}>Generate a new one</button>
                 </p>
               </>
             )}
@@ -869,8 +898,8 @@ const handleCheckIn = async (txId) => {
   // ── Render App ───────────────────────────────────────────────────────────
   const filteredItems = items.filter(it =>
     (catFilter === "All" || it.category === catFilter) &&
-    (it.siteId === siteFilter) &&
-    (it.zoneId === zoneFilter) &&
+    (siteFilter === "all" || it.siteId === siteFilter) &&
+    (siteFilter === "all" || it.zoneId === zoneFilter) &&
     (it.name.toLowerCase().includes(search.toLowerCase()) || it.locationDescription?.toLowerCase().includes(search.toLowerCase()))
   );
 
@@ -1031,16 +1060,24 @@ const handleCheckIn = async (txId) => {
                 <div className="toolbar section-gap">
                   <select className="filter-select" value={siteFilter} onChange={e => {
                     setSiteFilter(e.target.value);
-                    // Auto-select first zone of new site
+                    // Auto-select first zone of new site, or clear for "all"
                     const newSite = SITES.find(s => s.id === e.target.value);
-                    setZoneFilter(newSite?.zones[0].id || "");
+                    setZoneFilter(e.target.value === "all" ? "all" : (newSite?.zones[0].id || ""));
                   }}>
+                    <option value="all">All Locations</option>
                     {SITES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
-                  <select className="filter-select" value={zoneFilter} onChange={e => setZoneFilter(e.target.value)}>
-                    {SITES.find(s => s.id === siteFilter)?.zones.map(z => (
-                      <option key={z.id} value={z.id}>{z.name} - {z.description}</option>
-                    ))}
+                  <select className="filter-select" value={zoneFilter} onChange={e => setZoneFilter(e.target.value)} disabled={siteFilter === "all"}>
+                    {siteFilter === "all" ? (
+                      <option value="all">All Sections</option>
+                    ) : (
+                      <>
+                        <option value="all">All Sections</option>
+                        {SITES.find(s => s.id === siteFilter)?.zones.map(z => (
+                          <option key={z.id} value={z.id}>{z.name} - {z.description}</option>
+                        ))}
+                      </>
+                    )}
                   </select>
                   <div className="search-wrap">
                     <span className="search-icon">🔍</span>
@@ -1059,7 +1096,11 @@ const handleCheckIn = async (txId) => {
                     const zone = SITES.find(s => s.id === item.siteId)?.zones.find(z => z.id === item.zoneId);
                     return (
                       <div key={item.id} className="item-card">
-                        <span className="item-card-emoji">{item.image}</span>
+                        {isImageSource(item.image) ? (
+                          <div className="item-card-photo"><img src={item.image} alt={item.name} /></div>
+                        ) : (
+                          <span className="item-card-emoji">{item.image}</span>
+                        )}
                         <div className="item-card-name">{item.name}</div>
                         <div className="item-card-meta">
                           <span className="badge badge-cat">{item.category}</span>
@@ -1119,14 +1160,22 @@ const handleCheckIn = async (txId) => {
                   <select className="filter-select" value={siteFilter} onChange={e => {
                     setSiteFilter(e.target.value);
                     const newSite = SITES.find(s => s.id === e.target.value);
-                    setZoneFilter(newSite?.zones[0].id || "");
+                    setZoneFilter(e.target.value === "all" ? "all" : (newSite?.zones[0].id || ""));
                   }}>
+                    <option value="all">All Locations</option>
                     {SITES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
-                  <select className="filter-select" value={zoneFilter} onChange={e => setZoneFilter(e.target.value)}>
-                    {SITES.find(s => s.id === siteFilter)?.zones.map(z => (
-                      <option key={z.id} value={z.id}>{z.name}</option>
-                    ))}
+                  <select className="filter-select" value={zoneFilter} onChange={e => setZoneFilter(e.target.value)} disabled={siteFilter === "all"}>
+                    {siteFilter === "all" ? (
+                      <option value="all">All Sections</option>
+                    ) : (
+                      <>
+                        <option value="all">All Sections</option>
+                        {SITES.find(s => s.id === siteFilter)?.zones.map(z => (
+                          <option key={z.id} value={z.id}>{z.name}</option>
+                        ))}
+                      </>
+                    )}
                   </select>
                   <div className="search-wrap">
                     <span className="search-icon">🔍</span>
@@ -1144,7 +1193,11 @@ const handleCheckIn = async (txId) => {
                     const zone = SITES.find(s => s.id === item.siteId)?.zones.find(z => z.id === item.zoneId);
                     return (
                       <div key={item.id} className={`item-card ${available < 1 ? "disabled" : ""}`} style={available < 1 ? { opacity: 0.5 } : {}}>
-                        <span className="item-card-emoji">{item.image}</span>
+                        {isImageSource(item.image) ? (
+                          <div className="item-card-photo"><img src={item.image} alt={item.name} /></div>
+                        ) : (
+                          <span className="item-card-emoji">{item.image}</span>
+                        )}
                         <div className="item-card-name">{item.name}</div>
                         <div className="item-card-meta">
                           <span className="badge badge-cat">{item.category}</span>
@@ -1403,14 +1456,64 @@ const handleCheckIn = async (txId) => {
 
 // ── Add Item Modal ────────────────────────────────────────────────────────────
 function AddItemModal({ onClose, onSave }) {
-  const [form, setForm] = useState({ name: "", quantity: 1, category: "Ghosh", siteId: SITES[0].id, zoneId: SITES[0].zones[0].id, locationDescription: "" });
+  const [form, setForm] = useState({ name: "", quantity: 1, category: "Ghosh", siteId: SITES[0].id, zoneId: SITES[0].zones[0].id, locationDescription: "", image: "📦" });
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showZoom, setShowZoom] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const currentSite = SITES.find(s => s.id === form.siteId);
   
   return (
     <Modal title="Add Inventory Item" onClose={onClose}
-      footer={<><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={() => { if (form.name && form.locationDescription) onSave({ ...form, quantity: +form.quantity }); }} disabled={!form.name || !form.locationDescription}>Add Item</button></>}>
+      footer={<><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={() => { if (form.name && form.locationDescription && form.image) onSave({ ...form, quantity: +form.quantity }); }} disabled={!form.name || !form.locationDescription || !form.image}>Add Item</button></>}>
       <div className="field"><label>Item Name</label><input placeholder="e.g. Dhol" value={form.name} onChange={e => set("name", e.target.value)} /></div>
+      
+      <div className="field">
+        <label>Item Icon/Emoji</label>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
+          <div style={{ fontSize: 32, width: 50, height: 50, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--saffron-pale)", borderRadius: 8 }}>
+            {isImageSource(form.image) ? <img src={form.image} alt="Item" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 6 }} /> : form.image}
+          </div>
+          <button className="btn btn-sm btn-ghost" onClick={() => setShowEmojiPicker(!showEmojiPicker)}>
+            {showEmojiPicker ? "Hide" : "Pick"} Icon
+          </button>
+        </div>
+        {showEmojiPicker && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 6, padding: 12, background: "var(--warm-gray)", borderRadius: 8, marginBottom: 12, maxHeight: 220, overflowY: "auto" }}>
+            {EMOJI_PICKER.map(emoji => (
+              <button key={emoji} style={{ background: form.image === emoji ? "var(--saffron)" : "white", border: "1px solid var(--border)", borderRadius: 6, padding: 8, fontSize: 20, cursor: "pointer", transition: "all 0.2s" }}
+                onClick={() => { set("image", emoji); setShowEmojiPicker(false); }}>
+                {emoji}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="field">
+        <label>Upload Item Photo</label>
+        <input type="file" accept="image/*" onChange={e => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => set("image", reader.result || form.image);
+          reader.readAsDataURL(file);
+        }} />
+        {isImageSource(form.image) && (
+          <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 12 }}>
+            <img src={form.image} alt="Preview" style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 10, border: "1px solid var(--border)" }} />
+            <button className="btn btn-sm btn-ghost" onClick={() => setShowZoom(true)}>Zoom Photo</button>
+          </div>
+        )}
+        {showZoom && isImageSource(form.image) && (
+          <div className="zoom-overlay" onClick={() => setShowZoom(false)}>
+            <div className="zoom-content" onClick={e => e.stopPropagation()}>
+              <img src={form.image} alt="Full size" />
+              <button className="btn btn-sm btn-ghost" style={{ marginTop: 16 }} onClick={() => setShowZoom(false)}>Close</button>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="row-2">
         <div className="field"><label>Quantity</label><input type="number" min={1} value={form.quantity} onChange={e => set("quantity", e.target.value)} /></div>
         <div className="field"><label>Category</label>
@@ -1420,22 +1523,26 @@ function AddItemModal({ onClose, onSave }) {
         </div>
       </div>
       <div className="row-2">
-        <div className="field"><label>Site Location</label>
+        <div className="field"><label>Vibhag/Site</label>
           <select value={form.siteId} onChange={e => {
             set("siteId", e.target.value);
             const site = SITES.find(s => s.id === e.target.value);
-            setForm(f => ({ ...f, zoneId: site?.zones[0].id || "" }));
+            setForm(f => ({ ...f, zoneId: site?.zones[0]?.id || "" }));
           }}>
             {SITES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
-        <div className="field"><label>Zone/Section</label>
+        <div className="field"><label>Shakha/Section</label>
           <select value={form.zoneId} onChange={e => set("zoneId", e.target.value)}>
-            {currentSite?.zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
+            {currentSite?.zones?.length > 0 ? (
+              currentSite.zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)
+            ) : (
+              <option>No sections available</option>
+            )}
           </select>
         </div>
       </div>
-      <div className="field"><label>Description of Exact Location</label><input placeholder="e.g. Shelf 1, Top Row or Cabinet A, Left side" value={form.locationDescription} onChange={e => set("locationDescription", e.target.value)} /></div>
+      <div className="field"><label>Exact Location Description</label><input placeholder="e.g. Shelf 1, Top Row or Cabinet A, Left side" value={form.locationDescription} onChange={e => set("locationDescription", e.target.value)} /></div>
     </Modal>
   );
 }
@@ -1443,6 +1550,8 @@ function AddItemModal({ onClose, onSave }) {
 // ── Edit Item Modal ───────────────────────────────────────────────────────────
 function EditItemModal({ item, onClose, onSave, onDelete }) {
   const [form, setForm] = useState({ ...item });
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showZoom, setShowZoom] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const currentSite = SITES.find(s => s.id === form.siteId);
   
@@ -1450,6 +1559,54 @@ function EditItemModal({ item, onClose, onSave, onDelete }) {
     <Modal title="Edit Item" onClose={onClose}
       footer={<><button className="btn btn-danger btn-sm" onClick={() => onDelete(item.id)}>Delete</button><div style={{ flex: 1 }} /><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={() => onSave({ ...form, quantity: +form.quantity })}>Save Changes</button></>}>
       <div className="field"><label>Item Name</label><input value={form.name} onChange={e => set("name", e.target.value)} /></div>
+      
+      <div className="field">
+        <label>Item Icon/Emoji</label>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
+          <div style={{ fontSize: 32, width: 50, height: 50, display: "flex", alignItems: "center", justifyContent: "center", background: "var(--saffron-pale)", borderRadius: 8 }}>
+            {isImageSource(form.image) ? <img src={form.image} alt="Item" style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 6 }} /> : form.image}
+          </div>
+          <button className="btn btn-sm btn-ghost" onClick={() => setShowEmojiPicker(!showEmojiPicker)}>
+            {showEmojiPicker ? "Hide" : "Pick"} Icon
+          </button>
+        </div>
+        {showEmojiPicker && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 6, padding: 12, background: "var(--warm-gray)", borderRadius: 8, marginBottom: 12 }}>
+            {EMOJI_PICKER.map(emoji => (
+              <button key={emoji} style={{ background: form.image === emoji ? "var(--saffron)" : "white", border: "1px solid var(--border)", borderRadius: 6, padding: 8, fontSize: 20, cursor: "pointer", transition: "all 0.2s" }}
+                onClick={() => { set("image", emoji); setShowEmojiPicker(false); }}>
+                {emoji}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="field">
+        <label>Upload Item Photo</label>
+        <input type="file" accept="image/*" onChange={e => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => set("image", reader.result || form.image);
+          reader.readAsDataURL(file);
+        }} />
+        {isImageSource(form.image) && (
+          <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 12 }}>
+            <img src={form.image} alt="Preview" style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 10, border: "1px solid var(--border)" }} />
+            <button className="btn btn-sm btn-ghost" onClick={() => setShowZoom(true)}>Zoom Photo</button>
+          </div>
+        )}
+        {showZoom && isImageSource(form.image) && (
+          <div className="zoom-overlay" onClick={() => setShowZoom(false)}>
+            <div className="zoom-content" onClick={e => e.stopPropagation()}>
+              <img src={form.image} alt="Full size" />
+              <button className="btn btn-sm btn-ghost" style={{ marginTop: 16 }} onClick={() => setShowZoom(false)}>Close</button>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="row-2">
         <div className="field"><label>Quantity</label><input type="number" min={1} value={form.quantity} onChange={e => set("quantity", e.target.value)} /></div>
         <div className="field"><label>Category</label>
@@ -1459,22 +1616,26 @@ function EditItemModal({ item, onClose, onSave, onDelete }) {
         </div>
       </div>
       <div className="row-2">
-        <div className="field"><label>Site Location</label>
+        <div className="field"><label>Vibhag/Site</label>
           <select value={form.siteId} onChange={e => {
             set("siteId", e.target.value);
             const site = SITES.find(s => s.id === e.target.value);
-            setForm(f => ({ ...f, zoneId: site?.zones[0].id || "" }));
+            setForm(f => ({ ...f, zoneId: site?.zones[0]?.id || "" }));
           }}>
             {SITES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
-        <div className="field"><label>Zone/Section</label>
+        <div className="field"><label>Shakha/Section</label>
           <select value={form.zoneId} onChange={e => set("zoneId", e.target.value)}>
-            {currentSite?.zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
+            {currentSite?.zones?.length > 0 ? (
+              currentSite.zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)
+            ) : (
+              <option>No sections available</option>
+            )}
           </select>
         </div>
       </div>
-      <div className="field"><label>Description of Exact Location</label><input value={form.locationDescription} onChange={e => set("locationDescription", e.target.value)} /></div>
+      <div className="field"><label>Exact Location Description</label><input value={form.locationDescription} onChange={e => set("locationDescription", e.target.value)} /></div>
     </Modal>
   );
 }

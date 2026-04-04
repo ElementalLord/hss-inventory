@@ -10,7 +10,7 @@ serve(async (req) => {
       "Authorization": `Bearer ${Deno.env.get("RESEND_API_KEY")}`,
     },
     body: JSON.stringify({
-      from: "HSS Bhandar <onboarding@resend.dev>",
+      from: "HSS Bhandar <noreply@yourdomain.com>",
       to: email,
       subject: "Your HSS Bhandar Login Code",
       html: `
