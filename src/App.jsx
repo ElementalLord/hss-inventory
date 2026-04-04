@@ -445,7 +445,7 @@ function Modal({ title, onClose, footer, children }) {
 // ── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [users, setUsers] = useState(SEED_USERS);
-  const [items, setItems] = useState(SEED_ITEMS);
+  const [items, setItems] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [view, setView] = useState("dashboard");
@@ -463,14 +463,11 @@ export default function App() {
   const [otpCountdown, setOtpCountdown] = useState(0);
 
   const showToast = (msg, type = "success") => setToast({ msg, type });
+  const normalizeItem = (item) => ({
+    ...item,
+    locationDescription: item.locationDescription ?? item.location ?? "",
+  });
   useEffect(() => { loadData(); }, []);
-
-  // Ensure all users always see the default inventory items when the list is empty.
-  useEffect(() => {
-    if (items.length === 0) {
-      setItems(SEED_ITEMS);
-    }
-  }, [items.length]);
 
   useEffect(() => {
     if (authStep !== "otp" || !otpTarget?.otpExpiresAt) {
@@ -500,10 +497,10 @@ export default function App() {
         if (payload.eventType === 'INSERT') {
           setItems(prev => {
             if (prev.some(i => i.id === payload.new.id)) return prev;
-            return [...prev, payload.new];
+            return [...prev, normalizeItem(payload.new)];
           });
         } else if (payload.eventType === 'UPDATE') {
-          setItems(prev => prev.map(i => i.id === payload.new.id ? payload.new : i));
+          setItems(prev => prev.map(i => i.id === payload.new.id ? normalizeItem(payload.new) : i));
         } else if (payload.eventType === 'DELETE') {
           setItems(prev => prev.filter(i => i.id !== payload.old.id));
         }
@@ -638,30 +635,22 @@ const loadData = async () => {
       }
     }
 
-    // Always keep seed items in state so the inventory view is never empty.
-    setItems(prev => {
-      const merged = [...(it || prev || [])];
-      SEED_ITEMS.forEach(seed => {
-        if (!merged.some(x => x.id === seed.id)) {
-          merged.push(seed);
-        }
-      });
-      return merged;
-    });
-
-    // Persist any missing seed items into the DB.
-    try {
-      const { data: existingItems } = await supabase.from('items').select('*');
-      const existingIds = (existingItems || []).map(i => i.id);
-      const missing = SEED_ITEMS.filter(i => !existingIds.includes(i.id));
-      if (missing.length) {
-        await supabase.from('items').insert(missing.map(i => ({
+    if (!it || it.length === 0) {
+      try {
+        await supabase.from('items').insert(SEED_ITEMS.map(i => ({
           id: i.id, name: i.name, quantity: i.quantity, category: i.category,
-          siteId: i.siteId, zoneId: i.zoneId, locationDescription: i.locationDescription, image: i.image,
+          siteId: i.siteId, zoneId: i.zoneId,
+          location: i.locationDescription,
+          locationDescription: i.locationDescription,
+          image: i.image,
         })));
+        setItems(SEED_ITEMS);
+      } catch (err) {
+        console.warn("Unable to restore seed items to Supabase:", err);
+        setItems([]);
       }
-    } catch (err) {
-      console.warn("Unable to persist seed items to Supabase:", err);
+    } else {
+      setItems(it.map(normalizeItem));
     }
 
     // KEEP transaction history - do NOT clear it. Load all historical transactions.
@@ -756,10 +745,32 @@ const handleApproveUser = async (userId) => {
   showToast("User approved!", "success");
 };
 
-  const handleRejectUser = async (userId) => {
-    await supabase.from('users').update({ status: "rejected" }).eq('id', userId);
-    setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: "rejected" } : u));
-    showToast("User rejected.", "error");
+  const handleDeleteUser = async (userId) => {
+    if (!userId) {
+      showToast("Unable to remove user: missing ID.", "error");
+      return;
+    }
+
+    try {
+      const { error: txError } = await supabase.from('transactions').delete().or(`checked_out_by.eq.${userId},checked_in_by.eq.${userId}`);
+      if (txError) {
+        console.error("Delete related transactions error:", txError);
+        showToast("Failed to remove related transactions.", "error");
+        return;
+      }
+
+      const { data, error } = await supabase.from('users').delete().match({ id: userId });
+      if (!error) {
+        setUsers(prev => prev.filter(u => u.id !== userId));
+        showToast("User removed.", "success");
+      } else {
+        console.error("Delete user error:", error);
+        showToast("Failed to remove user: " + error.message, "error");
+      }
+    } catch (err) {
+      console.error("Delete user exception:", err);
+      showToast("Failed to remove user.", "error");
+    }
   };
 
   // ── Items ──
@@ -776,12 +787,15 @@ const handleAddItem = async (data) => {
   // Only include location fields if they have values
   if (newItem.siteId) insertData.siteId = newItem.siteId;
   if (newItem.zoneId) insertData.zoneId = newItem.zoneId;
-  if (newItem.locationDescription) insertData.locationDescription = newItem.locationDescription;
+  if (newItem.locationDescription) {
+    insertData.location = newItem.locationDescription;
+    insertData.locationDescription = newItem.locationDescription;
+  }
   
   try {
     const { error } = await supabase.from('items').insert(insertData);
     if (!error) {
-      setItems(prev => [...prev, newItem]);
+      setItems(prev => [...prev, normalizeItem(newItem)]);
       showToast("Item added!", "success");
     } else {
       console.error("Insert error:", error);
@@ -805,7 +819,10 @@ const handleEditItem = async (data) => {
   // Only include location fields if they have values (to avoid errors if columns don't exist)
   if (data.siteId) updateData.siteId = data.siteId;
   if (data.zoneId) updateData.zoneId = data.zoneId;
-  if (data.locationDescription !== undefined) updateData.locationDescription = data.locationDescription;
+  if (data.locationDescription !== undefined) {
+    updateData.location = data.locationDescription;
+    updateData.locationDescription = data.locationDescription;
+  }
   
   try {
     const { error } = await supabase.from('items').update(updateData).eq('id', data.id);
@@ -823,14 +840,66 @@ const handleEditItem = async (data) => {
   setModal(null);
 };
 
-const handleDeleteItem = async (itemId) => {
-  const { error } = await supabase.from('items').delete().eq('id', itemId);
-  if (!error) {
-    setItems(prev => prev.filter(i => i.id !== itemId));
-    showToast("Item deleted.", "error");
-  } else {
+const handleRestoreItems = async () => {
+    try {
+      const { data: existingItems, error: fetchError } = await supabase.from('items').select('id');
+      if (fetchError) throw fetchError;
+      const existingIds = (existingItems || []).map(i => i.id);
+      const missing = SEED_ITEMS.filter(i => !existingIds.includes(i.id));
+      if (!missing.length) {
+        showToast("Default items are already present.", "info");
+        return;
+      }
+      const { error: insertError } = await supabase.from('items').insert(missing.map(i => ({
+        id: i.id, name: i.name, quantity: i.quantity, category: i.category,
+        siteId: i.siteId, zoneId: i.zoneId,
+        location: i.locationDescription,
+        locationDescription: i.locationDescription,
+        image: i.image,
+      })));
+      if (insertError) throw insertError;
+      setItems(prev => {
+        const merged = [...prev];
+        missing.forEach(item => {
+          if (!merged.some(i => i.id === item.id)) merged.push(item);
+        });
+        return merged;
+      });
+      showToast(`Restored ${missing.length} default items.`, "success");
+    } catch (err) {
+      console.error("Restore items error:", err);
+      showToast("Failed to restore default items.", "error");
+    }
+  };
+
+  const handleDeleteItem = async (itemId) => {
+  if (!itemId) {
+    showToast("Unable to delete item: missing ID.", "error");
+    return;
+  }
+
+  try {
+    const { error: txError } = await supabase.from('transactions').delete().match({ item_id: itemId });
+    if (txError) {
+      console.error("Delete related transactions error:", txError);
+      showToast("Failed to remove related transactions.", "error");
+      return;
+    }
+
+    const { data, error } = await supabase.from('items').delete().match({ id: itemId });
+    if (!error) {
+      setItems(prev => prev.filter(i => i.id !== itemId));
+      setTransactions(prev => prev.filter(t => t.itemId !== itemId));
+      showToast("Item deleted.", "success");
+    } else {
+      console.error("Delete item error:", error);
+      showToast("Failed to delete item: " + error.message, "error");
+    }
+  } catch (err) {
+    console.error("Delete item exception:", err);
     showToast("Failed to delete item.", "error");
   }
+
   setModal(null);
 };
 
@@ -1144,7 +1213,10 @@ const handleCheckIn = async (txId) => {
                   <p>Managing {SITES.find(s => s.id === siteFilter)?.name} - {SITES.find(s => s.id === siteFilter)?.zones.find(z => z.id === zoneFilter)?.name}</p>
                 </div>
                 {currentUser.role === "admin" && (
-                  <button className="btn btn-primary" onClick={() => setModal("add-item")}>+ Add Item</button>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                    <button className="btn btn-secondary" onClick={handleRestoreItems}>Restore Default Items</button>
+                    <button className="btn btn-primary" onClick={() => setModal("add-item")}>+ Add Item</button>
+                  </div>
                 )}
               </div>
               <div className="page-body">
@@ -1442,7 +1514,7 @@ const handleCheckIn = async (txId) => {
                               <td>
                                 <div style={{ display: "flex", gap: 8 }}>
                                   <button className="btn btn-sm btn-forest" onClick={() => handleApproveUser(u.id)}>✓ Approve</button>
-                                  <button className="btn btn-sm btn-danger" onClick={() => handleRejectUser(u.id)}>✕ Reject</button>
+                                  <button className="btn btn-sm btn-danger" onClick={() => handleDeleteUser(u.id)}>✕ Remove</button>
                                 </div>
                               </td>
                             </tr>
@@ -1469,7 +1541,7 @@ const handleCheckIn = async (txId) => {
                             <td><span className={`badge badge-${u.status}`}>{u.status}</span></td>
                             <td>
                               {u.role !== "admin" && (
-                                <button className="btn btn-sm btn-danger" onClick={() => handleRejectUser(u.id)}>Remove</button>
+                                <button className="btn btn-sm btn-danger" onClick={() => handleDeleteUser(u.id)}>Remove</button>
                               )}
                             </td>
                           </tr>
