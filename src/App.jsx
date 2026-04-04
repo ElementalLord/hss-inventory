@@ -15,6 +15,7 @@ const SITES = [
       { id: "z5", name: "Sooraj Shakha", description: "Sooraj branch inventory" },
       { id: "z6", name: "Adisankrachariya Shakha", description: "Adisankrachariya branch inventory" },
       { id: "z7", name: "Texas Hindu Campsite", description: "Hindu campsite inventory" },
+      { id: "z8", name: "Bhandar", description: "Main storage inventory" },
     ]
   },
   {
@@ -26,7 +27,7 @@ const SITES = [
 ];
 
 const SEED_USERS = [
-  { id: "u_admin1", name: "System Admin", email: "admin@hss.org", role: "admin", status: "approved", expectedOtp: "123456" },
+  { id: "u_admin1", name: "Admin", email: "admin@nhv.org", role: "admin", status: "approved", expectedOtp: "123456" },
 ];
 
 const CATEGORIES = ["Ghosh", "Sharirikh", "Kitchen", "Decoration", "Food", "Audio/Visual", "Sports", "Office", "Camping", "Other"]; 
@@ -340,6 +341,34 @@ const css = `
     .main-content { margin-left: 0; }
     .page-body { padding: 16px; }
     .row-2 { grid-template-columns: 1fr; }
+  }
+
+  @media (max-width: 480px) {
+    .auth-page { padding: 16px; }
+    .auth-box { padding: 32px 20px; max-width: none; }
+    .auth-title { font-size: 24px; }
+    .page-header { padding: 16px; flex-direction: column; align-items: stretch; gap: 12px; }
+    .page-header-left h2 { font-size: 20px; }
+    .page-body { padding: 12px; }
+    .stats-grid { grid-template-columns: 1fr; }
+    .items-grid { grid-template-columns: 1fr; }
+    .item-card { padding: 16px; }
+    .item-card-name { font-size: 16px; }
+    .item-card-qty { font-size: 20px; }
+    .modal { max-width: none; margin: 16px; }
+    .modal-header { padding: 16px 20px; }
+    .modal-body { padding: 16px 20px; }
+    .modal-footer { padding: 12px 20px; flex-direction: column; gap: 8px; }
+    .btn { padding: 10px 16px; font-size: 13px; }
+    .btn-sm { padding: 6px 12px; font-size: 12px; }
+    .toolbar { flex-direction: column; align-items: stretch; gap: 8px; }
+    .search-wrap { min-width: auto; }
+    .filter-select { width: 100%; }
+    .tbl th, .tbl td { padding: 8px 12px; font-size: 13px; }
+    .zoom-content { padding: 16px; }
+    .zoom-content img { max-height: 70vh; }
+    .otp-code { font-size: 28px; }
+    .otp-input { width: 44px; height: 48px; font-size: 20px; }
   }
 `;
 
@@ -819,7 +848,7 @@ const handleCheckIn = async (txId) => {
             <div className="auth-logo">
               <div className="auth-logo-icon">🪷</div>
               <div>
-                <h1>HSS Inventory</h1>
+                <h1>NHV Inventory</h1>
                 <span>Multi-Site Management System</span>
               </div>
             </div>
@@ -905,6 +934,7 @@ const handleCheckIn = async (txId) => {
 
   const myOpenTransactions = transactions.filter(t => t.status === "out" && t.checkedOutBy === currentUser.id);
   const allOpenTransactions = transactions.filter(t => t.status === "out");
+  const filteredTransactions = currentUser.role === "admin" ? transactions : transactions.filter(t => t.checkedOutBy === currentUser.id);
 
   return (
     <>
@@ -916,7 +946,7 @@ const handleCheckIn = async (txId) => {
         <aside className="sidebar">
           <div className="sidebar-logo">
             <div className="logo-icon">🪷</div>
-            <h2>HSS Inventory</h2>
+            <h2>NHV Inventory</h2>
             <span>Multi-Site Manager</span>
           </div>
           <nav className="sidebar-nav">
@@ -1292,7 +1322,7 @@ const handleCheckIn = async (txId) => {
               <div className="page-header">
                 <div className="page-header-left">
                   <h2>Transaction History</h2>
-                  <p>{transactions.length} total records</p>
+                  <p>{filteredTransactions.length} total records</p>
                 </div>
               </div>
               <div className="page-body">
@@ -1303,7 +1333,7 @@ const handleCheckIn = async (txId) => {
                         <tr><th>Item</th><th>Qty</th><th>Checked Out By</th><th>Check Out</th><th>Checked In By</th><th>Check In</th><th>Status</th></tr>
                       </thead>
                       <tbody>
-                        {[...transactions].reverse().map(t => (
+                        {[...filteredTransactions].reverse().map(t => (
                           <tr key={t.id}>
                             <td><strong>{t.itemName}</strong></td>
                             <td>{t.quantity}</td>
@@ -1491,7 +1521,7 @@ function AddItemModal({ onClose, onSave }) {
 
       <div className="field">
         <label>Upload Item Photo</label>
-        <input type="file" accept="image/*" onChange={e => {
+        <input type="file" accept="image/*" capture="environment" onChange={e => {
           const file = e.target.files?.[0];
           if (!file) return;
           const reader = new FileReader();
@@ -1584,7 +1614,7 @@ function EditItemModal({ item, onClose, onSave, onDelete }) {
 
       <div className="field">
         <label>Upload Item Photo</label>
-        <input type="file" accept="image/*" onChange={e => {
+        <input type="file" accept="image/*" capture="environment" onChange={e => {
           const file = e.target.files?.[0];
           if (!file) return;
           const reader = new FileReader();
