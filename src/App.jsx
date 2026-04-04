@@ -1,7 +1,31 @@
 import { supabase } from './supabase.js'
 import { useState, useEffect, useRef } from "react";
 
-// ── Seed Data ────────────────────────────────────────────────────────────────
+// ── Locations & Sites ────────────────────────────────────────────────────────
+const SITES = [
+  {
+    id: "site1",
+    name: "North Site",
+    zone: "Primary Bhandar",
+    zones: [
+      { id: "z1", name: "Ghosh Section", description: "Music instruments storage" },
+      { id: "z2", name: "Sharirikh Section", description: "Physical training equipment" },
+      { id: "z3", name: "Kitchen Storage", description: "Utensils and food items" },
+      { id: "z4", name: "Decoration Closet", description: "Banners, decorations, seasonal items" },
+    ]
+  },
+  {
+    id: "site2",
+    name: "South Site",
+    zone: "Secondary Location",
+    zones: [
+      { id: "z5", name: "Main Storage", description: "General inventory storage" },
+      { id: "z6", name: "Sports Equipment", description: "Balls, ropes, and sports gear" },
+      { id: "z7", name: "Office Supplies", description: "Stationery and office items" },
+    ]
+  },
+];
+
 const SEED_USERS = [
   { id: "u0", name: "Admin", email: "admin@hss.org", role: "admin", status: "approved", expectedOtp: "123456" },
   { id: "u1", name: "Naitik", email: "naitik@hss.org", role: "admin", status: "approved", expectedOtp: "492817" },
@@ -15,32 +39,15 @@ const CATEGORIES = ["Ghosh", "Sharirikh", "Kitchen", "Decoration", "Food", "Audi
 const randQty = () => Math.floor(Math.random() * 20) + 1;
 
 const SEED_ITEMS = [
-  { id: "i1", name: "Dand", quantity: randQty(), category: "Sharirikh", location: "Sharirikh Rack", image: "🪵" },
-  { id: "i2", name: "Vamshi", quantity: randQty(), category: "Ghosh", location: "Ghosh Storage", image: "🪘" },
-  { id: "i3", name: "Anak", quantity: randQty(), category: "Ghosh", location: "Ghosh Storage", image: "🎺" },
-  { id: "i4", name: "Venu", quantity: randQty(), category: "Ghosh", location: "Ghosh Storage", image: "🎶" },
-  { id: "i5", name: "Banner", quantity: randQty(), category: "Decoration", location: "Decoration Closet", image: "🎉" },
-  { id: "i6", name: "Spoons", quantity: randQty(), category: "Food", location: "Kitchen Cabinet 1", image: "🥄" },
-  { id: "i7", name: "Forks", quantity: randQty(), category: "Food", location: "Kitchen Cabinet 1", image: "🍴" },
-  { id: "i8", name: "Rope", quantity: randQty(), category: "Sports", location: "Sports Bin", image: "🧵" },
-  { id: "i9", name: "Balls", quantity: randQty(), category: "Sports", location: "Sports Bin", image: "⚽" },
-];
-
-const SEED_TRANSACTIONS = [
-  {
-    id: "t1", itemId: "i1", itemName: "Dhol", quantity: 1,
-    checkedOutBy: "u1", checkedOutByName: "Priya Sharma",
-    checkOutTime: new Date(Date.now() - 35 * 24 * 60 * 60 * 1000).toISOString(),
-    checkedInBy: null, checkInTime: null, status: "out",
-  },
-  {
-    id: "t2", itemId: "i5", itemName: "Decorative Diyas", quantity: 10,
-    checkedOutBy: "u1", checkedOutByName: "Priya Sharma",
-    checkOutTime: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-    checkedInBy: "u1", checkedInByName: "Priya Sharma",
-    checkInTime: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-    status: "in",
-  },
+  { id: "i1", name: "Dand", quantity: randQty(), category: "Sharirikh", siteId: "site1", zoneId: "z2", locationDescription: "Shelf 1, Top Row", image: "🪵" },
+  { id: "i2", name: "Vamshi", quantity: randQty(), category: "Ghosh", siteId: "site1", zoneId: "z1", locationDescription: "Cabinet A, Left side", image: "🪘" },
+  { id: "i3", name: "Anak", quantity: randQty(), category: "Ghosh", siteId: "site1", zoneId: "z1", locationDescription: "Cabinet A, Right side", image: "🎺" },
+  { id: "i4", name: "Venu", quantity: randQty(), category: "Ghosh", siteId: "site1", zoneId: "z1", locationDescription: "Shelf 2, Middle Row", image: "🎶" },
+  { id: "i5", name: "Banner", quantity: randQty(), category: "Decoration", siteId: "site1", zoneId: "z4", locationDescription: "Hanging rod, Back wall", image: "🎉" },
+  { id: "i6", name: "Spoons", quantity: randQty(), category: "Food", siteId: "site1", zoneId: "z3", locationDescription: "Drawer 1, Kitchen counter", image: "🥄" },
+  { id: "i7", name: "Forks", quantity: randQty(), category: "Food", siteId: "site1", zoneId: "z3", locationDescription: "Drawer 2, Kitchen counter", image: "🍴" },
+  { id: "i8", name: "Rope", quantity: randQty(), category: "Sports", siteId: "site2", zoneId: "z6", locationDescription: "Bin A, Top shelf", image: "🧵" },
+  { id: "i9", name: "Balls", quantity: randQty(), category: "Sports", siteId: "site2", zoneId: "z6", locationDescription: "Bin B, Lower shelf", image: "⚽" },
 ];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -395,6 +402,8 @@ export default function App() {
   const [toast, setToast] = useState(null);
   const [modal, setModal] = useState(null);
   const [catFilter, setCatFilter] = useState("All");
+  const [siteFilter, setSiteFilter] = useState(SITES[0].id); // Add site filter
+  const [zoneFilter, setZoneFilter] = useState(SITES[0].zones[0].id); // Add zone filter
   const [search, setSearch] = useState("");
   const [regData, setRegData] = useState({ name: "", email: "" });
   const [loginEmail, setLoginEmail] = useState("");
@@ -410,6 +419,70 @@ export default function App() {
       setItems(SEED_ITEMS);
     }
   }, [items.length]);
+
+  // ── Real-time synchronization ──
+  useEffect(() => {
+    // Subscribe to items changes
+    const itemsSubscription = supabase
+      .channel('items-channel')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'items' }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          setItems(prev => {
+            if (prev.some(i => i.id === payload.new.id)) return prev;
+            return [...prev, payload.new];
+          });
+        } else if (payload.eventType === 'UPDATE') {
+          setItems(prev => prev.map(i => i.id === payload.new.id ? payload.new : i));
+        } else if (payload.eventType === 'DELETE') {
+          setItems(prev => prev.filter(i => i.id !== payload.old.id));
+        }
+      })
+      .subscribe();
+
+    // Subscribe to transactions changes
+    const txSubscription = supabase
+      .channel('transactions-channel')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          setTransactions(prev => {
+            if (prev.some(t => t.id === payload.new.id)) return prev;
+            return [...prev, {
+              id: payload.new.id,
+              itemId: payload.new.item_id,
+              itemName: payload.new.item_name,
+              quantity: payload.new.quantity,
+              checkedOutBy: payload.new.checked_out_by,
+              checkedOutByName: payload.new.checked_out_by_name,
+              checkOutTime: payload.new.check_out_time,
+              checkedInBy: payload.new.checked_in_by,
+              checkedInByName: payload.new.checked_in_by_name,
+              checkInTime: payload.new.check_in_time,
+              status: payload.new.status,
+            }];
+          });
+        } else if (payload.eventType === 'UPDATE') {
+          setTransactions(prev => prev.map(t => t.id === payload.new.id ? {
+            id: payload.new.id,
+            itemId: payload.new.item_id,
+            itemName: payload.new.item_name,
+            quantity: payload.new.quantity,
+            checkedOutBy: payload.new.checked_out_by,
+            checkedOutByName: payload.new.checked_out_by_name,
+            checkOutTime: payload.new.check_out_time,
+            checkedInBy: payload.new.checked_in_by,
+            checkedInByName: payload.new.checked_in_by_name,
+            checkInTime: payload.new.check_in_time,
+            status: payload.new.status,
+          } : t));
+        }
+      })
+      .subscribe();
+
+    return () => {
+      itemsSubscription.unsubscribe();
+      txSubscription.unsubscribe();
+    };
+  }, []);
 
 const loadData = async () => {
   try {
@@ -486,30 +559,24 @@ const loadData = async () => {
       if (missing.length) {
         await supabase.from('items').insert(missing.map(i => ({
           id: i.id, name: i.name, quantity: i.quantity, category: i.category,
-          location: i.location, image: i.image,
+          siteId: i.siteId, zoneId: i.zoneId, locationDescription: i.locationDescription, image: i.image,
         })));
       }
     } catch (err) {
       console.warn("Unable to persist seed items to Supabase:", err);
     }
 
-    // Clear history so the app starts empty each time.
-    try {
-      if (tx?.length) {
-        await supabase.from('transactions').delete().neq('id', '');
-      }
+    // KEEP transaction history - do NOT clear it. Load all historical transactions.
+    if (tx?.length) {
+      setTransactions(tx.map(t => ({
+        id: t.id, itemId: t.item_id, itemName: t.item_name,
+        quantity: t.quantity, checkedOutBy: t.checked_out_by,
+        checkedOutByName: t.checked_out_by_name, checkOutTime: t.check_out_time,
+        checkedInBy: t.checked_in_by, checkedInByName: t.checked_in_by_name,
+        checkInTime: t.check_in_time, status: t.status,
+      })));
+    } else {
       setTransactions([]);
-    } catch (err) {
-      console.warn("Unable to clear transaction history:", err);
-      if (tx?.length) {
-        setTransactions(tx.map(t => ({
-          id: t.id, itemId: t.item_id, itemName: t.item_name,
-          quantity: t.quantity, checkedOutBy: t.checked_out_by,
-          checkedOutByName: t.checked_out_by_name, checkOutTime: t.check_out_time,
-          checkedInBy: t.checked_in_by, checkedInByName: t.checked_in_by_name,
-          checkInTime: t.check_in_time, status: t.status,
-        })));
-      }
     }
   } catch (err) {
     console.warn("Failed to load data from Supabase:", err);
@@ -592,23 +659,52 @@ const handleApproveUser = async (userId) => {
   // ── Items ──
 const handleAddItem = async (data) => {
   const newItem = { id: uid(), ...data, image: "📦" };
-  await supabase.from('items').insert(newItem);
-  setItems(prev => [...prev, newItem]);
-  showToast("Item added!", "success");
+  const { error } = await supabase.from('items').insert({
+    id: newItem.id,
+    name: newItem.name,
+    quantity: newItem.quantity,
+    category: newItem.category,
+    siteId: newItem.siteId,
+    zoneId: newItem.zoneId,
+    locationDescription: newItem.locationDescription,
+    image: newItem.image,
+  });
+  if (!error) {
+    setItems(prev => [...prev, newItem]);
+    showToast("Item added!", "success");
+  } else {
+    showToast("Failed to add item.", "error");
+  }
   setModal(null);
 };
 
 const handleEditItem = async (data) => {
-  await supabase.from('items').update(data).eq('id', data.id);
-  setItems(prev => prev.map(it => it.id === data.id ? data : it));
-  showToast("Item updated!", "success");
+  const updateData = {
+    name: data.name,
+    quantity: data.quantity,
+    category: data.category,
+    siteId: data.siteId,
+    zoneId: data.zoneId,
+    locationDescription: data.locationDescription,
+  };
+  const { error } = await supabase.from('items').update(updateData).eq('id', data.id);
+  if (!error) {
+    setItems(prev => prev.map(it => it.id === data.id ? { ...it, ...updateData } : it));
+    showToast("Item updated!", "success");
+  } else {
+    showToast("Failed to update item.", "error");
+  }
   setModal(null);
 };
 
 const handleDeleteItem = async (itemId) => {
-  await supabase.from('items').delete().eq('id', itemId);
-  setItems(prev => prev.filter(i => i.id !== itemId));
-  showToast("Item deleted.", "error");
+  const { error } = await supabase.from('items').delete().eq('id', itemId);
+  if (!error) {
+    setItems(prev => prev.filter(i => i.id !== itemId));
+    showToast("Item deleted.", "error");
+  } else {
+    showToast("Failed to delete item.", "error");
+  }
   setModal(null);
 };
 
@@ -687,8 +783,8 @@ const handleCheckIn = async (txId) => {
             <div className="auth-logo">
               <div className="auth-logo-icon">🪷</div>
               <div>
-                <h1>HSS Bhandar</h1>
-                <span>Hindu Swayamsevak Sangh</span>
+                <h1>HSS Inventory</h1>
+                <span>Multi-Site Management System</span>
               </div>
             </div>
 
@@ -773,7 +869,9 @@ const handleCheckIn = async (txId) => {
   // ── Render App ───────────────────────────────────────────────────────────
   const filteredItems = items.filter(it =>
     (catFilter === "All" || it.category === catFilter) &&
-    (it.name.toLowerCase().includes(search.toLowerCase()) || it.location.toLowerCase().includes(search.toLowerCase()))
+    (it.siteId === siteFilter) &&
+    (it.zoneId === zoneFilter) &&
+    (it.name.toLowerCase().includes(search.toLowerCase()) || it.locationDescription?.toLowerCase().includes(search.toLowerCase()))
   );
 
   const myOpenTransactions = transactions.filter(t => t.status === "out" && t.checkedOutBy === currentUser.id);
@@ -789,8 +887,8 @@ const handleCheckIn = async (txId) => {
         <aside className="sidebar">
           <div className="sidebar-logo">
             <div className="logo-icon">🪷</div>
-            <h2>HSS Bhandar</h2>
-            <span>Inventory Manager</span>
+            <h2>HSS Inventory</h2>
+            <span>Multi-Site Manager</span>
           </div>
           <nav className="sidebar-nav">
             <div className="nav-section">
@@ -923,7 +1021,7 @@ const handleCheckIn = async (txId) => {
               <div className="page-header">
                 <div className="page-header-left">
                   <h2>Inventory</h2>
-                  <p>{items.length} items across {CATEGORIES.filter(c => items.some(i => i.category === c)).length} categories</p>
+                  <p>Managing {SITES.find(s => s.id === siteFilter)?.name} - {SITES.find(s => s.id === siteFilter)?.zones.find(z => z.id === zoneFilter)?.name}</p>
                 </div>
                 {currentUser.role === "admin" && (
                   <button className="btn btn-primary" onClick={() => setModal("add-item")}>+ Add Item</button>
@@ -931,9 +1029,22 @@ const handleCheckIn = async (txId) => {
               </div>
               <div className="page-body">
                 <div className="toolbar section-gap">
+                  <select className="filter-select" value={siteFilter} onChange={e => {
+                    setSiteFilter(e.target.value);
+                    // Auto-select first zone of new site
+                    const newSite = SITES.find(s => s.id === e.target.value);
+                    setZoneFilter(newSite?.zones[0].id || "");
+                  }}>
+                    {SITES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                  <select className="filter-select" value={zoneFilter} onChange={e => setZoneFilter(e.target.value)}>
+                    {SITES.find(s => s.id === siteFilter)?.zones.map(z => (
+                      <option key={z.id} value={z.id}>{z.name} - {z.description}</option>
+                    ))}
+                  </select>
                   <div className="search-wrap">
                     <span className="search-icon">🔍</span>
-                    <input type="text" placeholder="Search items…" value={search} onChange={e => setSearch(e.target.value)} />
+                    <input type="text" placeholder="Search items or location…" value={search} onChange={e => setSearch(e.target.value)} />
                   </div>
                   <select className="filter-select" value={catFilter} onChange={e => setCatFilter(e.target.value)}>
                     <option>All</option>
@@ -945,13 +1056,17 @@ const handleCheckIn = async (txId) => {
                     const outTxs = transactions.filter(t => t.itemId === item.id && t.status === "out");
                     const totalOut = outTxs.reduce((s, t) => s + t.quantity, 0);
                     const available = item.quantity - totalOut;
+                    const zone = SITES.find(s => s.id === item.siteId)?.zones.find(z => z.id === item.zoneId);
                     return (
                       <div key={item.id} className="item-card">
                         <span className="item-card-emoji">{item.image}</span>
                         <div className="item-card-name">{item.name}</div>
                         <div className="item-card-meta">
                           <span className="badge badge-cat">{item.category}</span>
-                          <span className="tag">📍 {item.location}</span>
+                        </div>
+                        <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14, lineHeight: 1.4 }}>
+                          <div><strong>📍 {zone?.name}</strong></div>
+                          <div>{item.locationDescription}</div>
                         </div>
                         <div style={{ display: "flex", gap: 20 }}>
                           <div>
@@ -1001,6 +1116,18 @@ const handleCheckIn = async (txId) => {
               </div>
               <div className="page-body">
                 <div className="toolbar section-gap">
+                  <select className="filter-select" value={siteFilter} onChange={e => {
+                    setSiteFilter(e.target.value);
+                    const newSite = SITES.find(s => s.id === e.target.value);
+                    setZoneFilter(newSite?.zones[0].id || "");
+                  }}>
+                    {SITES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                  <select className="filter-select" value={zoneFilter} onChange={e => setZoneFilter(e.target.value)}>
+                    {SITES.find(s => s.id === siteFilter)?.zones.map(z => (
+                      <option key={z.id} value={z.id}>{z.name}</option>
+                    ))}
+                  </select>
                   <div className="search-wrap">
                     <span className="search-icon">🔍</span>
                     <input type="text" placeholder="Search items…" value={search} onChange={e => setSearch(e.target.value)} />
@@ -1014,13 +1141,17 @@ const handleCheckIn = async (txId) => {
                   {filteredItems.map(item => {
                     const totalOut = transactions.filter(t => t.itemId === item.id && t.status === "out").reduce((s, t) => s + t.quantity, 0);
                     const available = item.quantity - totalOut;
+                    const zone = SITES.find(s => s.id === item.siteId)?.zones.find(z => z.id === item.zoneId);
                     return (
                       <div key={item.id} className={`item-card ${available < 1 ? "disabled" : ""}`} style={available < 1 ? { opacity: 0.5 } : {}}>
                         <span className="item-card-emoji">{item.image}</span>
                         <div className="item-card-name">{item.name}</div>
                         <div className="item-card-meta">
                           <span className="badge badge-cat">{item.category}</span>
-                          <span className="tag">📍 {item.location}</span>
+                        </div>
+                        <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14, lineHeight: 1.4 }}>
+                          <div><strong>📍 {zone?.name}</strong></div>
+                          <div>{item.locationDescription}</div>
                         </div>
                         <div>
                           <div className="item-card-qty">{available}</div>
@@ -1272,11 +1403,13 @@ const handleCheckIn = async (txId) => {
 
 // ── Add Item Modal ────────────────────────────────────────────────────────────
 function AddItemModal({ onClose, onSave }) {
-  const [form, setForm] = useState({ name: "", quantity: 1, category: "Ghosh", location: "" });
+  const [form, setForm] = useState({ name: "", quantity: 1, category: "Ghosh", siteId: SITES[0].id, zoneId: SITES[0].zones[0].id, locationDescription: "" });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const currentSite = SITES.find(s => s.id === form.siteId);
+  
   return (
     <Modal title="Add Inventory Item" onClose={onClose}
-      footer={<><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={() => { if (form.name && form.location) onSave({ ...form, quantity: +form.quantity }); }}>Add Item</button></>}>
+      footer={<><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={() => { if (form.name && form.locationDescription) onSave({ ...form, quantity: +form.quantity }); }} disabled={!form.name || !form.locationDescription}>Add Item</button></>}>
       <div className="field"><label>Item Name</label><input placeholder="e.g. Dhol" value={form.name} onChange={e => set("name", e.target.value)} /></div>
       <div className="row-2">
         <div className="field"><label>Quantity</label><input type="number" min={1} value={form.quantity} onChange={e => set("quantity", e.target.value)} /></div>
@@ -1286,7 +1419,23 @@ function AddItemModal({ onClose, onSave }) {
           </select>
         </div>
       </div>
-      <div className="field"><label>Storage Location</label><input placeholder="e.g. Storage Room A, Shelf 2" value={form.location} onChange={e => set("location", e.target.value)} /></div>
+      <div className="row-2">
+        <div className="field"><label>Site Location</label>
+          <select value={form.siteId} onChange={e => {
+            set("siteId", e.target.value);
+            const site = SITES.find(s => s.id === e.target.value);
+            setForm(f => ({ ...f, zoneId: site?.zones[0].id || "" }));
+          }}>
+            {SITES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </div>
+        <div className="field"><label>Zone/Section</label>
+          <select value={form.zoneId} onChange={e => set("zoneId", e.target.value)}>
+            {currentSite?.zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
+          </select>
+        </div>
+      </div>
+      <div className="field"><label>Description of Exact Location</label><input placeholder="e.g. Shelf 1, Top Row or Cabinet A, Left side" value={form.locationDescription} onChange={e => set("locationDescription", e.target.value)} /></div>
     </Modal>
   );
 }
@@ -1295,6 +1444,8 @@ function AddItemModal({ onClose, onSave }) {
 function EditItemModal({ item, onClose, onSave, onDelete }) {
   const [form, setForm] = useState({ ...item });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const currentSite = SITES.find(s => s.id === form.siteId);
+  
   return (
     <Modal title="Edit Item" onClose={onClose}
       footer={<><button className="btn btn-danger btn-sm" onClick={() => onDelete(item.id)}>Delete</button><div style={{ flex: 1 }} /><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={() => onSave({ ...form, quantity: +form.quantity })}>Save Changes</button></>}>
@@ -1307,7 +1458,23 @@ function EditItemModal({ item, onClose, onSave, onDelete }) {
           </select>
         </div>
       </div>
-      <div className="field"><label>Storage Location</label><input value={form.location} onChange={e => set("location", e.target.value)} /></div>
+      <div className="row-2">
+        <div className="field"><label>Site Location</label>
+          <select value={form.siteId} onChange={e => {
+            set("siteId", e.target.value);
+            const site = SITES.find(s => s.id === e.target.value);
+            setForm(f => ({ ...f, zoneId: site?.zones[0].id || "" }));
+          }}>
+            {SITES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </div>
+        <div className="field"><label>Zone/Section</label>
+          <select value={form.zoneId} onChange={e => set("zoneId", e.target.value)}>
+            {currentSite?.zones.map(z => <option key={z.id} value={z.id}>{z.name}</option>)}
+          </select>
+        </div>
+      </div>
+      <div className="field"><label>Description of Exact Location</label><input value={form.locationDescription} onChange={e => set("locationDescription", e.target.value)} /></div>
     </Modal>
   );
 }
@@ -1317,6 +1484,8 @@ function CheckOutModal({ item, transactions, user, onClose, onConfirm }) {
   const totalOut = transactions.filter(t => t.itemId === item.id && t.status === "out").reduce((s, t) => s + t.quantity, 0);
   const available = item.quantity - totalOut;
   const [qty, setQty] = useState(1);
+  const zone = SITES.find(s => s.id === item.siteId)?.zones.find(z => z.id === item.zoneId);
+  
   return (
     <Modal title={`Check Out: ${item.name}`} onClose={onClose}
       footer={<><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={() => onConfirm(item.id, qty)} disabled={qty < 1 || qty > available}>Confirm Check Out</button></>}>
@@ -1330,7 +1499,10 @@ function CheckOutModal({ item, transactions, user, onClose, onConfirm }) {
       <div className="field"><label>Quantity to Check Out</label>
         <input type="number" min={1} max={available} value={qty} onChange={e => setQty(Math.min(available, Math.max(1, +e.target.value)))} />
       </div>
-      <div className="field"><label>Location</label><input value={item.location} disabled /></div>
+      <div className="row-2">
+        <div className="field"><label>Zone</label><input value={zone?.name || ""} disabled /></div>
+        <div className="field"><label>Exact Location</label><input value={item.locationDescription} disabled /></div>
+      </div>
     </Modal>
   );
 }
