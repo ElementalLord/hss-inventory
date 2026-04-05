@@ -123,6 +123,16 @@ const css = `
   .auth-logo span { font-size: 12px; color: var(--text-muted); font-family: 'DM Sans', sans-serif; font-weight: 400; display: block; }
   .auth-title { font-size: 28px; color: var(--forest); margin-bottom: 8px; }
   .auth-sub { color: var(--text-muted); font-size: 14px; margin-bottom: 32px; line-height: 1.5; }
+  .device-choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0 14px; }
+  .device-choice-btn {
+    border: 1.5px solid var(--border); background: var(--white); border-radius: 14px;
+    padding: 16px 14px; text-align: left; cursor: pointer; transition: all 0.2s;
+  }
+  .device-choice-btn:hover { border-color: var(--saffron); box-shadow: 0 8px 24px rgba(232,112,42,0.12); transform: translateY(-1px); }
+  .device-choice-btn strong { display: block; color: var(--forest); font-size: 15px; margin-bottom: 4px; }
+  .device-choice-btn span { color: var(--text-muted); font-size: 12px; line-height: 1.4; }
+  .device-choice-icon { font-size: 20px; margin-bottom: 8px; display: block; }
+  .auth-device-note { text-align: center; color: var(--text-muted); font-size: 12px; }
   .otp-code-banner { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; margin-bottom: 18px; padding: 18px 16px; background: #F4F6FF; border: 1px solid rgba(37, 99, 235, 0.15); border-radius: 14px; }
   .otp-code { font-size: 36px; letter-spacing: 0.18em; font-weight: 700; color: #1D4ED8; }
 
@@ -236,13 +246,99 @@ const css = `
   .welcome-title { font-family: 'Great Vibes', cursive; font-size: 36px; color: var(--forest); margin-bottom: 16px; animation: fadeInUp 0.8s ease-out; line-height: 1.2; }
   .welcome-subtitle { font-size: 18px; color: var(--text-muted); animation: fadeInUp 0.8s ease-out 0.2s both; margin-bottom: 24px; }
   .welcome-stats { margin-top: 32px; animation: fadeInUp 0.8s ease-out 0.4s both; }
+        return results;
+      }
+    }
+  }
+  return results;
+}
 
   @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 
   /* ── Profile Photo ── */
-  .profile-section { display: flex; justify-content: center; align-items: center; gap: 16px; margin-bottom: 32px; }
-  .profile-info h3 { font-size: 18px; color: var(--forest); margin-bottom: 2px; }
-  .profile-info p { color: var(--text-muted); font-size: 13px; }
+  .profile-section { display: flex; justify-content: center; align-items: center; gap: 16px; margin: 8px 0 26px; }
+  .profile-info { margin-top: 8px; }
+  .profile-info h3 { font-size: 23px; color: var(--saffron); margin-bottom: 4px; letter-spacing: 0.02em; }
+  .profile-info p { color: var(--saffron-light); font-size: 14px; font-weight: 600; }
+
+  .cloud-divider {
+    margin: 6px auto 2px;
+    max-width: 460px;
+    height: 2px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(232,112,42,0.15) 0%, rgba(232,112,42,0.75) 50%, rgba(232,112,42,0.15) 100%);
+  }
+
+  .app-layout.mobile-mode {
+    flex-direction: column;
+  }
+  .app-layout.mobile-mode .sidebar {
+    width: 100%;
+    height: auto;
+    position: sticky;
+    top: 0;
+    flex-direction: column;
+    overflow: visible;
+    z-index: 120;
+  }
+  .app-layout.mobile-mode .sidebar-logo {
+    padding: 12px 14px 8px;
+  }
+  .app-layout.mobile-mode .sidebar-logo .logo-icon {
+    width: 30px;
+    height: 30px;
+    font-size: 15px;
+    margin-bottom: 6px;
+  }
+  .app-layout.mobile-mode .sidebar-logo h2 {
+    font-size: 15px;
+  }
+  .app-layout.mobile-mode .sidebar-logo span {
+    font-size: 10px;
+  }
+  .app-layout.mobile-mode .sidebar-nav {
+    padding: 8px 10px 10px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .app-layout.mobile-mode .nav-section {
+    margin-bottom: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: max-content;
+  }
+  .app-layout.mobile-mode .nav-label {
+    display: none;
+  }
+  .app-layout.mobile-mode .nav-item {
+    width: auto;
+    min-width: max-content;
+    white-space: nowrap;
+    padding: 8px 12px;
+    margin-bottom: 0;
+    border: 1px solid rgba(255,255,255,0.16);
+    background: rgba(255,255,255,0.05);
+    color: rgba(255,255,255,0.92);
+  }
+  .app-layout.mobile-mode .nav-item.active {
+    border-color: rgba(255,255,255,0.22);
+    background: var(--saffron);
+    color: #fff;
+  }
+  .app-layout.mobile-mode .sidebar-user {
+    padding: 10px 14px;
+  }
+  .app-layout.mobile-mode .main-content { margin-left: 0; }
+  .app-layout.mobile-mode .page-header { padding: 16px; flex-direction: column; align-items: stretch; gap: 12px; }
+  .app-layout.mobile-mode .page-body { padding: 12px; }
+  .app-layout.mobile-mode .stats-grid { grid-template-columns: 1fr; }
+  .app-layout.mobile-mode .items-grid { grid-template-columns: 1fr; }
+  .app-layout.mobile-mode .toolbar { flex-direction: column; align-items: stretch; gap: 8px; }
+  .app-layout.mobile-mode .filter-select,
+  .app-layout.mobile-mode .search-wrap { width: 100%; min-width: auto; }
+  .app-layout.mobile-mode .card-body { overflow-x: auto; }
+  .app-layout.mobile-mode .tbl { min-width: 640px; }
 
   /* ── Disclaimer ── */
   .disclaimer { text-align: center; padding: 16px; background: var(--warm-gray); border-radius: var(--radius); margin-top: 32px; font-size: 12px; color: var(--text-muted); }
@@ -386,10 +482,12 @@ const css = `
   .section-gap { margin-bottom: 24px; }
 
   @media (max-width: 768px) {
-    .sidebar { width: 100%; height: auto; position: static; flex-direction: row; flex-wrap: wrap; }
-    .main-content { margin-left: 0; }
+    .app-layout.desktop-mode .sidebar { width: 100%; height: auto; position: static; flex-direction: row; flex-wrap: wrap; }
+    .app-layout.desktop-mode .main-content { margin-left: 0; }
     .page-body { padding: 16px; }
     .row-2 { grid-template-columns: 1fr; }
+    .device-choice-grid { grid-template-columns: 1fr; }
+    .cloud-divider { max-width: 300px; }
   }
 
   @media (max-width: 480px) {
@@ -416,6 +514,7 @@ const css = `
     .tbl th, .tbl td { padding: 8px 12px; font-size: 13px; }
     .zoom-content { padding: 16px; }
     .zoom-content img { max-height: 70vh; }
+    .cloud-divider { max-width: 220px; margin-top: 2px; }
     .otp-code { font-size: 28px; }
     .otp-input { width: 44px; height: 48px; font-size: 20px; }
   }
@@ -502,6 +601,11 @@ export default function App() {
   const [otpValue, setOtpValue] = useState("");
   const [otpTarget, setOtpTarget] = useState(null); // user being verified
   const [otpCountdown, setOtpCountdown] = useState(0);
+  const [uiMode, setUiMode] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return window.localStorage.getItem("ui_mode") || "";
+  });
+  const isMobileMode = uiMode === "mobile";
 
   const showToast = (msg, type = "success") => setToast({ msg, type });
   const normalizeItem = (item) => ({
@@ -512,6 +616,12 @@ export default function App() {
     ...user,
     passwordHash: user.password_hash ?? user.passwordHash,
   });
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && uiMode) {
+      window.localStorage.setItem("ui_mode", uiMode);
+    }
+  }, [uiMode]);
   useEffect(() => {
     (async () => {
       try {
@@ -1093,7 +1203,7 @@ const handleCheckIn = async (txId) => {
       <>
         <style>{css}</style>
         {toast && <Toast {...toast} onDone={() => setToast(null)} />}
-        <div className="auth-page">
+        <div className={`auth-page ${isMobileMode ? "mobile-mode" : "desktop-mode"}`}>
           <div className="auth-box">
             <div className="auth-logo">
               <div className="auth-logo-icon">🪷</div>
@@ -1103,7 +1213,27 @@ const handleCheckIn = async (txId) => {
               </div>
             </div>
 
-            {authStep === "login" && (
+            {!uiMode && (
+              <>
+                <h2 className="auth-title">Choose Your Device</h2>
+                <p className="auth-sub">Pick your experience before logging in. You can change this later from the login screen.</p>
+                <div className="device-choice-grid">
+                  <button className="device-choice-btn" onClick={() => setUiMode("mobile")}>
+                    <span className="device-choice-icon">📱</span>
+                    <strong>Mobile Phone</strong>
+                    <span>Larger touch targets, single-column layout, compact navigation.</span>
+                  </button>
+                  <button className="device-choice-btn" onClick={() => setUiMode("desktop")}>
+                    <span className="device-choice-icon">🖥️</span>
+                    <strong>Desktop / Laptop</strong>
+                    <span>Full-width dashboard with sidebar and dense data layout.</span>
+                  </button>
+                </div>
+                <p className="auth-device-note">This appears first so the app can optimize your UI immediately.</p>
+              </>
+            )}
+
+            {uiMode && authStep === "login" && (
               <>
                 <h2 className="auth-title">Sign In</h2>
                 <p className="auth-sub">Enter your registered email. We'll send a one-time password.</p>
@@ -1122,10 +1252,13 @@ const handleCheckIn = async (txId) => {
                 <div className="info-box" style={{ marginTop: 20, marginBottom: 0 }}>
                   <strong>New User?</strong> Register above and wait for admin approval to access the system.
                 </div>
+                <p style={{ textAlign: "center", marginTop: 14, fontSize: 12, color: "var(--text-muted)" }}>
+                  Using <strong>{isMobileMode ? "Mobile" : "Desktop"}</strong> view. <button className="link-btn" onClick={() => setUiMode("")}>Change</button>
+                </p>
               </>
             )}
 
-            {authStep === "register" && (
+            {uiMode && authStep === "register" && (
               <>
                 <h2 className="auth-title">Create Account</h2>
                 <p className="auth-sub">Register with your name and email. An admin will review and approve your account.</p>
@@ -1153,7 +1286,7 @@ const handleCheckIn = async (txId) => {
               </>
             )}
 
-            {authStep === "otp" && (
+            {uiMode && authStep === "otp" && (
               <>
                 <h2 className="auth-title">Enter OTP</h2>
                 <p className="auth-sub">A 6-digit code is shown below for 30 seconds. Enter it below to continue.</p>
@@ -1173,7 +1306,7 @@ const handleCheckIn = async (txId) => {
                 </p>
               </>
             )}
-            {authStep === "password" && (
+            {uiMode && authStep === "password" && (
               <>
                 <h2 className="auth-title">{otpTarget?.passwordHash ? "Enter Password" : "Set Password"}</h2>
                 <p className="auth-sub">
@@ -1226,7 +1359,7 @@ const handleCheckIn = async (txId) => {
       <style>{css}</style>
       {toast && <Toast {...toast} onDone={() => setToast(null)} />}
 
-      <div className="app-layout">
+      <div className={`app-layout ${isMobileMode ? "mobile-mode" : "desktop-mode"}`}>
         {/* Sidebar */}
         <aside className="sidebar">
           <div className="sidebar-logo">
@@ -1275,6 +1408,7 @@ const handleCheckIn = async (txId) => {
                   </div>
                 </div>
               </div>
+              <div className="cloud-divider" aria-hidden="true" />
               <div className="page-body">
                 <div className="stats-grid">
                   <div className="stat-card" onClick={() => setStatModal('total-items')}>
@@ -1910,6 +2044,12 @@ function AddItemModal({ onClose, onSave }) {
   const [showZoom, setShowZoom] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const currentSite = SITES.find(s => s.id === form.siteId);
+  const handleImageFile = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => set("image", reader.result || form.image);
+    reader.readAsDataURL(file);
+  };
   
   return (
     <Modal title="Add Inventory Item" onClose={onClose}
@@ -1940,13 +2080,16 @@ function AddItemModal({ onClose, onSave }) {
 
       <div className="field">
         <label>Upload Item Photo</label>
-        <input type="file" accept="image/*" capture="environment" onChange={e => {
-          const file = e.target.files?.[0];
-          if (!file) return;
-          const reader = new FileReader();
-          reader.onload = () => set("image", reader.result || form.image);
-          reader.readAsDataURL(file);
-        }} />
+        <div className="row-2">
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label style={{ marginBottom: 6 }}>From Files</label>
+            <input type="file" accept="image/*" onChange={e => handleImageFile(e.target.files?.[0])} />
+          </div>
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label style={{ marginBottom: 6 }}>Use Camera</label>
+            <input type="file" accept="image/*" capture="environment" onChange={e => handleImageFile(e.target.files?.[0])} />
+          </div>
+        </div>
         {isImageSource(form.image) && (
           <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 12 }}>
             <img src={form.image} alt="Preview" style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 10, border: "1px solid var(--border)" }} />
@@ -2008,6 +2151,12 @@ function EditItemModal({ item, onClose, onSave, onDelete }) {
   const [showZoom, setShowZoom] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const currentSite = SITES.find(s => s.id === form.siteId);
+  const handleImageFile = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => set("image", reader.result || form.image);
+    reader.readAsDataURL(file);
+  };
   
   return (
     <Modal title="Edit Item" onClose={onClose}
@@ -2038,13 +2187,16 @@ function EditItemModal({ item, onClose, onSave, onDelete }) {
 
       <div className="field">
         <label>Upload Item Photo</label>
-        <input type="file" accept="image/*" capture="environment" onChange={e => {
-          const file = e.target.files?.[0];
-          if (!file) return;
-          const reader = new FileReader();
-          reader.onload = () => set("image", reader.result || form.image);
-          reader.readAsDataURL(file);
-        }} />
+        <div className="row-2">
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label style={{ marginBottom: 6 }}>From Files</label>
+            <input type="file" accept="image/*" onChange={e => handleImageFile(e.target.files?.[0])} />
+          </div>
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label style={{ marginBottom: 6 }}>Use Camera</label>
+            <input type="file" accept="image/*" capture="environment" onChange={e => handleImageFile(e.target.files?.[0])} />
+          </div>
+        </div>
         {isImageSource(form.image) && (
           <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 12 }}>
             <img src={form.image} alt="Preview" style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 10, border: "1px solid var(--border)" }} />
@@ -2098,12 +2250,20 @@ function EditItemModal({ item, onClose, onSave, onDelete }) {
 function CheckOutModal({ item, transactions, user, onClose, onConfirm }) {
   const totalOut = transactions.filter(t => t.itemId === item.id && t.status === "out").reduce((s, t) => s + t.quantity, 0);
   const available = item.quantity - totalOut;
-  const [qty, setQty] = useState(1);
+  const [qtyInput, setQtyInput] = useState("1");
   const zone = SITES.find(s => s.id === item.siteId)?.zones.find(z => z.id === item.zoneId);
+  const parsedQty = Number.parseInt(qtyInput, 10);
+  const safeQty = Number.isNaN(parsedQty) ? 0 : parsedQty;
+  const invalidQty = safeQty < 1 || safeQty > available;
+
+  const normalizeQtyInput = () => {
+    const clamped = Math.min(available, Math.max(1, safeQty || 1));
+    setQtyInput(String(clamped));
+  };
   
   return (
     <Modal title={`Check Out: ${item.name}`} onClose={onClose}
-      footer={<><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={() => onConfirm(item.id, qty)} disabled={qty < 1 || qty > available}>Confirm Check Out</button></>}>
+      footer={<><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={() => { if (!invalidQty) onConfirm(item.id, safeQty); }} disabled={invalidQty}>Confirm Check Out</button></>}>
       <div className="info-box">
         <strong>{user.name}</strong> will be checking out this item on {new Date().toLocaleString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}.
       </div>
@@ -2112,7 +2272,14 @@ function CheckOutModal({ item, transactions, user, onClose, onConfirm }) {
         <div><div style={{ fontSize: 28, fontFamily: "Playfair Display", color: "var(--text-muted)" }}>{item.quantity}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>Total Stock</div></div>
       </div>
       <div className="field"><label>Quantity to Check Out</label>
-        <input type="number" min={1} max={available} value={qty} onChange={e => setQty(Math.min(available, Math.max(1, +e.target.value)))} />
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={qtyInput}
+          onChange={e => setQtyInput(e.target.value.replace(/[^0-9]/g, ""))}
+          onBlur={normalizeQtyInput}
+        />
       </div>
       <div className="row-2">
         <div className="field"><label>Zone</label><input value={zone?.name || ""} disabled /></div>
