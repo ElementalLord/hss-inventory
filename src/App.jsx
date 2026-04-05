@@ -27,7 +27,7 @@ const SITES = [
 ];
 
 const SEED_USERS = [
-  { id: "u_admin1", name: "Admin", email: "admin@nhv.org", role: "admin", status: "approved", expectedOtp: "123456" },
+  { id: "u_admin1", name: "Admin", email: "admin@hss.org", role: "admin", status: "approved", passwordHash: "7676aaafb027c825bd9abab78b234070e702752f625b752e55e55b48e607e358" },
 ];
 
 const CATEGORIES = ["Ghosh", "Sharirikh", "Kitchen", "Decoration", "Food", "Audio/Visual", "Sports", "Office", "Camping", "Other"]; 
@@ -61,9 +61,17 @@ const isImageSource = (value) => typeof value === "string" && (value.startsWith(
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 
+const hashPassword = async (password) => {
+  if (!password) return "";
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
+};
+
 // ── Styles ───────────────────────────────────────────────────────────────────
 const css = `
-  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&family=Great+Vibes&display=swap');
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -206,12 +214,13 @@ const css = `
   .page-body { padding: 32px; }
 
   /* ── Stats ── */
-  .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 32px; }
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 32px; max-width: 900px; margin-left: auto; margin-right: auto; justify-items: center; }
   .stat-card {
     background: var(--white); border-radius: var(--radius); padding: 22px 24px;
     box-shadow: var(--shadow); border: 1px solid var(--border);
-    display: flex; align-items: flex-start; gap: 14px;
+    display: flex; align-items: flex-start; gap: 14px; cursor: pointer; transition: all 0.2s;
   }
+  .stat-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
   .stat-icon { width: 44px; height: 44px; border-radius: 11px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
   .stat-icon.orange { background: var(--saffron-pale); }
   .stat-icon.green { background: #E8F5EE; }
@@ -219,6 +228,25 @@ const css = `
   .stat-icon.blue { background: #EAF2FF; }
   .stat-val { font-family: 'Playfair Display', serif; font-size: 30px; color: var(--forest); line-height: 1; }
   .stat-label { font-size: 12px; color: var(--text-muted); font-weight: 500; margin-top: 4px; }
+
+  /* ── Dashboard Welcome ── */
+  .dashboard-welcome { background: linear-gradient(135deg, var(--saffron-pale) 0%, var(--cream) 100%); padding: 60px 32px; margin: -32px -32px 32px; border-radius: 0 0 var(--radius) var(--radius); position: relative; overflow: hidden; }
+  .dashboard-welcome::before { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="20" cy="20" r="2" fill="rgba(232,112,42,0.1)"/><circle cx="80" cy="40" r="1.5" fill="rgba(232,112,42,0.1)"/><circle cx="60" cy="80" r="1" fill="rgba(232,112,42,0.1)"/></svg>') repeat; opacity: 0.5; }
+  .welcome-content { position: relative; z-index: 1; text-align: center; padding: 20px 0; }
+  .welcome-title { font-family: 'Great Vibes', cursive; font-size: 36px; color: var(--forest); margin-bottom: 16px; animation: fadeInUp 0.8s ease-out; line-height: 1.2; }
+  .welcome-subtitle { font-size: 18px; color: var(--text-muted); animation: fadeInUp 0.8s ease-out 0.2s both; margin-bottom: 24px; }
+  .welcome-stats { margin-top: 32px; animation: fadeInUp 0.8s ease-out 0.4s both; }
+
+  @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ── Profile Photo ── */
+  .profile-section { display: flex; justify-content: center; align-items: center; gap: 16px; margin-bottom: 32px; }
+  .profile-info h3 { font-size: 18px; color: var(--forest); margin-bottom: 2px; }
+  .profile-info p { color: var(--text-muted); font-size: 13px; }
+
+  /* ── Disclaimer ── */
+  .disclaimer { text-align: center; padding: 16px; background: var(--warm-gray); border-radius: var(--radius); margin-top: 32px; font-size: 12px; color: var(--text-muted); }
+
 
   /* ── Cards ── */
   .card { background: var(--white); border-radius: var(--radius); box-shadow: var(--shadow); border: 1px solid var(--border); overflow: hidden; }
@@ -253,8 +281,15 @@ const css = `
   }
   .item-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); border-color: var(--saffron); }
   .item-card-emoji { font-size: 32px; margin-bottom: 12px; display: block; }
-  .item-card-photo { margin-bottom: 12px; width: 100%; height: 150px; border-radius: 16px; overflow: hidden; background: var(--warm-gray); display: grid; place-items: center; }
+  .item-card-photo-wrapper { position: relative; margin-bottom: 12px; }
+  .item-card-photo { width: 100%; height: 150px; border-radius: 16px; overflow: hidden; background: var(--warm-gray); display: grid; place-items: center; }
   .item-card-photo img { width: 100%; height: 100%; object-fit: cover; }
+  .item-card-zoom-btn {
+    position: absolute; right: 12px; bottom: 12px; border: 1px solid rgba(255,255,255,0.85);
+    background: rgba(255,255,255,0.88); color: #1a1a1a; border-radius: 999px; padding: 8px 10px;
+    font-size: 14px; cursor: pointer; backdrop-filter: blur(6px); box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+  }
+  .item-card-zoom-btn:hover { transform: scale(1.02); }
   .item-card-name { font-family: 'Playfair Display', serif; font-size: 17px; color: var(--forest); margin-bottom: 6px; }
   .zoom-overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,0.75); display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 1100;
@@ -388,8 +423,9 @@ const css = `
 
 // ── OTP Input Component ───────────────────────────────────────────────────────
 function OTPInput({ value, onChange }) {
-  const refs = [useRef(), useRef(), useRef(), useRef(), useRef(), useRef()];
+  const refs = useRef([]);
   const digits = (value + "      ").slice(0, 6).split("");
+  const inputs = [0, 1, 2, 3, 4, 5];
 
   const handle = (i, e) => {
     const v = e.target.value.replace(/\D/g, "").slice(-1);
@@ -397,17 +433,19 @@ function OTPInput({ value, onChange }) {
     arr[i] = v;
     const joined = arr.join("").trim();
     onChange(joined);
-    if (v && i < 5) refs[i + 1].current?.focus();
+    if (v && i < 5) refs.current[i + 1]?.focus();
   };
 
   const handleKey = (i, e) => {
-    if (e.key === "Backspace" && !digits[i].trim() && i > 0) refs[i - 1].current?.focus();
+    if (e.key === "Backspace" && !digits[i].trim() && i > 0) refs.current[i - 1]?.focus();
   };
 
   return (
     <div className="otp-row">
-      {refs.map((ref, i) => (
-        <input key={i} ref={ref} className="otp-input" maxLength={1}
+      {inputs.map((i) => (
+        <input key={i}
+          ref={(el) => { refs.current[i] = el; }}
+          className="otp-input" maxLength={1}
           value={digits[i].trim()} onChange={(e) => handle(i, e)} onKeyDown={(e) => handleKey(i, e)}
           inputMode="numeric" />
       ))}
@@ -417,7 +455,7 @@ function OTPInput({ value, onChange }) {
 
 // ── Toast ────────────────────────────────────────────────────────────────────
 function Toast({ msg, type, onDone }) {
-  useEffect(() => { const t = setTimeout(onDone, 3200); return () => clearTimeout(t); }, []);
+  useEffect(() => { const t = setTimeout(onDone, 3200); return () => clearTimeout(t); }, [onDone]);
   return (
     <div className={`toast ${type}`}>
       <span>{type === "success" ? "✓" : type === "error" ? "✕" : "ℹ"}</span>
@@ -449,15 +487,18 @@ export default function App() {
   const [transactions, setTransactions] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [view, setView] = useState("dashboard");
-  const [authStep, setAuthStep] = useState("login"); // login | register | otp | pending
+  const [authStep, setAuthStep] = useState("login"); // login | register | otp | password | pending
   const [toast, setToast] = useState(null);
   const [modal, setModal] = useState(null);
+  const [zoomImage, setZoomImage] = useState(null);
+  const [statModal, setStatModal] = useState(null); // for stat details
   const [catFilter, setCatFilter] = useState("All");
   const [siteFilter, setSiteFilter] = useState("all"); // "all" shows all items
   const [zoneFilter, setZoneFilter] = useState("all"); // "all" shows all zones
   const [search, setSearch] = useState("");
-  const [regData, setRegData] = useState({ name: "", email: "" });
+  const [regData, setRegData] = useState({ name: "", email: "", password: "" });
   const [loginEmail, setLoginEmail] = useState("");
+  const [passwordValue, setPasswordValue] = useState("");
   const [otpValue, setOtpValue] = useState("");
   const [otpTarget, setOtpTarget] = useState(null); // user being verified
   const [otpCountdown, setOtpCountdown] = useState(0);
@@ -467,7 +508,114 @@ export default function App() {
     ...item,
     locationDescription: item.locationDescription ?? item.location ?? "",
   });
-  useEffect(() => { loadData(); }, []);
+  const normalizeUser = (user) => ({
+    ...user,
+    passwordHash: user.password_hash ?? user.passwordHash,
+  });
+  useEffect(() => {
+    (async () => {
+      try {
+        const [{ data: u }, { data: it }, { data: tx }] = await Promise.all([
+          supabase.from('users').select('*'),
+          supabase.from('items').select('*'),
+          supabase.from('transactions').select('*'),
+        ]);
+
+        if (u?.length) {
+          setUsers(prev => {
+            const merged = [...prev];
+            u.map(normalizeUser).forEach(dbUser => {
+              const idx = merged.findIndex(x => x.email.toLowerCase() === dbUser.email.toLowerCase());
+              if (idx > -1) {
+                merged[idx] = { ...merged[idx], ...dbUser, passwordHash: dbUser.passwordHash ?? merged[idx].passwordHash };
+              } else {
+                merged.push(dbUser);
+              }
+            });
+            return merged;
+          });
+
+          // Persist seeded admin users to the DB and ensure they remain approved.
+          try {
+            const existingEmails = u.map(x => x.email.toLowerCase());
+            const seeded = SEED_USERS.map(s => ({
+              email: s.email.toLowerCase(), role: s.role, status: s.status, name: s.name, id: s.id, passwordHash: s.passwordHash,
+            }));
+
+            // Update any existing seeded emails to be approved admins (prevents pending/blocking state).
+            const seededEmails = seeded.map(s => s.email);
+            await supabase.from('users').update({ role: 'admin', status: 'approved' }).in('email', seededEmails);
+            await supabase.from('users').update({ role: 'user' }).eq('role', 'admin').neq('email', seededEmails[0]);
+            const seededHashFixes = u.map(normalizeUser).filter(dbUser => seededEmails.includes(dbUser.email?.toLowerCase()) && !dbUser.passwordHash);
+            for (const dbUser of seededHashFixes) {
+              const seed = seeded.find(s => s.email === dbUser.email.toLowerCase());
+              if (seed?.passwordHash) {
+                await supabase.from('users').update({ password_hash: seed.passwordHash }).eq('email', dbUser.email);
+              }
+            }
+            setUsers(prev => prev.map(u => {
+              const email = u.email?.toLowerCase();
+              if (email && email !== seededEmails[0] && u.role === 'admin') {
+                return { ...u, role: 'user' };
+              }
+              if (email && seededEmails.includes(email)) {
+                return { ...u, role: 'admin', status: 'approved' };
+              }
+              return u;
+            }));
+
+            const missingSeedUsers = seeded.filter(su => !existingEmails.includes(su.email));
+            if (missingSeedUsers.length) {
+              await supabase.from('users').insert(missingSeedUsers.map(u => ({
+                id: u.id, name: u.name, email: u.email, role: u.role, status: u.status,
+                password_hash: u.passwordHash,
+              })));
+              setUsers(prev => {
+                const have = prev.map(x => x.email.toLowerCase());
+                const toAdd = missingSeedUsers.filter(su => !have.includes(su.email));
+                return [...prev, ...toAdd];
+              });
+            }
+          } catch (err) {
+            console.warn("Unable to persist seeded admins to Supabase:", err);
+          }
+        }
+
+        if (!it || it.length === 0) {
+          try {
+            await supabase.from('items').insert(SEED_ITEMS.map(i => ({
+              id: i.id, name: i.name, quantity: i.quantity, category: i.category,
+              siteId: i.siteId, zoneId: i.zoneId,
+              location: i.locationDescription,
+              locationDescription: i.locationDescription,
+              image: i.image,
+            })));
+            setItems(SEED_ITEMS);
+          } catch (err) {
+            console.warn("Unable to restore seed items to Supabase:", err);
+            setItems([]);
+          }
+        } else {
+          setItems(it.map(normalizeItem));
+        }
+
+        // KEEP transaction history - do NOT clear it. Load all historical transactions.
+        if (tx?.length) {
+          setTransactions(tx.map(t => ({
+            id: t.id, itemId: t.item_id, itemName: t.item_name,
+            quantity: t.quantity, checkedOutBy: t.checked_out_by,
+            checkedOutByName: t.checked_out_by_name, checkOutTime: t.check_out_time,
+            checkedInBy: t.checked_in_by, checkedInByName: t.checked_in_by_name,
+            checkInTime: t.check_in_time, status: t.status,
+          })));
+        } else {
+          setTransactions([]);
+        }
+      } catch (err) {
+        console.warn("Failed to load data from Supabase:", err);
+      }
+    })();
+  }, []);
 
   useEffect(() => {
     if (authStep !== "otp" || !otpTarget?.otpExpiresAt) {
@@ -551,15 +699,17 @@ export default function App() {
       .channel('users-channel')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, (payload) => {
         if (payload.eventType === 'INSERT') {
+          const newUser = normalizeUser(payload.new);
           setUsers(prev => {
-            if (prev.some(u => u.id === payload.new.id)) return prev;
-            return [...prev, payload.new];
+            if (prev.some(u => u.id === newUser.id)) return prev;
+            return [...prev, newUser];
           });
         } else if (payload.eventType === 'UPDATE') {
-          setUsers(prev => prev.map(u => u.id === payload.new.id ? payload.new : u));
+          const updatedUser = normalizeUser(payload.new);
+          setUsers(prev => prev.map(u => u.id === updatedUser.id ? { ...u, ...updatedUser, passwordHash: updatedUser.passwordHash ?? u.passwordHash } : u));
           // If current user updated, update currentUser
           if (currentUser && payload.new.id === currentUser.id) {
-            setCurrentUser(payload.new);
+            setCurrentUser({ ...currentUser, ...updatedUser, passwordHash: updatedUser.passwordHash ?? currentUser.passwordHash });
             if (payload.new.status === 'approved') {
               setAuthStep('login');
               setView('inventory');
@@ -584,91 +734,7 @@ export default function App() {
       txSubscription.unsubscribe();
       usersSubscription.unsubscribe();
     };
-  }, []);
-
-const loadData = async () => {
-  try {
-    const [{ data: u }, { data: it }, { data: tx }] = await Promise.all([
-      supabase.from('users').select('*'),
-      supabase.from('items').select('*'),
-      supabase.from('transactions').select('*'),
-    ]);
-
-    if (u?.length) {
-      setUsers(prev => {
-        const merged = [...prev];
-        u.forEach(dbUser => {
-          const idx = merged.findIndex(x => x.email.toLowerCase() === dbUser.email.toLowerCase());
-          if (idx > -1) {
-            merged[idx] = { ...merged[idx], ...dbUser };
-          } else {
-            merged.push(dbUser);
-          }
-        });
-        return merged;
-      });
-
-      // Persist seeded admin users to the DB and ensure they remain approved.
-      try {
-        const existingEmails = u.map(x => x.email.toLowerCase());
-        const seeded = SEED_USERS.map(s => ({
-          email: s.email.toLowerCase(), role: s.role, status: s.status, name: s.name, id: s.id,
-        }));
-
-        // Update any existing seeded emails to be approved admins (prevents pending/blocking state).
-        const seededEmails = seeded.map(s => s.email);
-        await supabase.from('users').update({ role: 'admin', status: 'approved' }).in('email', seededEmails);
-
-        const missingSeedUsers = seeded.filter(su => !existingEmails.includes(su.email));
-        if (missingSeedUsers.length) {
-          await supabase.from('users').insert(missingSeedUsers.map(u => ({
-            id: u.id, name: u.name, email: u.email, role: u.role, status: u.status,
-          })));
-          setUsers(prev => {
-            const have = prev.map(x => x.email.toLowerCase());
-            const toAdd = missingSeedUsers.filter(su => !have.includes(su.email));
-            return [...prev, ...toAdd];
-          });
-        }
-      } catch (err) {
-        console.warn("Unable to persist seeded admins to Supabase:", err);
-      }
-    }
-
-    if (!it || it.length === 0) {
-      try {
-        await supabase.from('items').insert(SEED_ITEMS.map(i => ({
-          id: i.id, name: i.name, quantity: i.quantity, category: i.category,
-          siteId: i.siteId, zoneId: i.zoneId,
-          location: i.locationDescription,
-          locationDescription: i.locationDescription,
-          image: i.image,
-        })));
-        setItems(SEED_ITEMS);
-      } catch (err) {
-        console.warn("Unable to restore seed items to Supabase:", err);
-        setItems([]);
-      }
-    } else {
-      setItems(it.map(normalizeItem));
-    }
-
-    // KEEP transaction history - do NOT clear it. Load all historical transactions.
-    if (tx?.length) {
-      setTransactions(tx.map(t => ({
-        id: t.id, itemId: t.item_id, itemName: t.item_name,
-        quantity: t.quantity, checkedOutBy: t.checked_out_by,
-        checkedOutByName: t.checked_out_by_name, checkOutTime: t.check_out_time,
-        checkedInBy: t.checked_in_by, checkedInByName: t.checked_in_by_name,
-        checkInTime: t.check_in_time, status: t.status,
-      })));
-    } else {
-      setTransactions([]);
-    }
-  } catch (err) {
-    console.warn("Failed to load data from Supabase:", err);
-  }
-};
+  }, [currentUser]);
 
   // ── Derived ──
   const overdueCount = transactions.filter(t => t.status === "out" && daysAgo(t.checkOutTime) > 30).length;
@@ -704,19 +770,25 @@ const loadData = async () => {
   };
 
   const handleRegister = async () => {
-    if (!regData.name || !regData.email) { showToast("Please fill in all fields.", "error"); return; }
+    if (!regData.name || !regData.email || !regData.password) { showToast("Please fill in all fields.", "error"); return; }
     const emailLower = regData.email.trim().toLowerCase();
     const exists = users.find(x => x.email.toLowerCase() === emailLower);
     if (exists) { showToast("An account with that email already exists.", "error"); return; }
 
-    const newUser = { id: uid(), name: regData.name.trim(), email: emailLower, role: "user", status: "pending" };
-    const { data: inserted, error } = await supabase.from('users').insert([newUser]).select();
+    const passwordHash = await hashPassword(regData.password.trim());
+    const newUser = {
+      id: uid(), name: regData.name.trim(), email: emailLower,
+      role: "user", status: "pending"
+    };
+    const insertPayload = { ...newUser, password_hash: passwordHash };
+    const { data: inserted, error } = await supabase.from('users').insert([insertPayload]).select().single();
     if (error) {
-      showToast("Unable to register. Please try again.", "error");
+      console.error("Register error:", error);
+      showToast(error.message || "Unable to register. Please try again.", "error");
       return;
     }
 
-    const userRecord = inserted?.[0] || newUser;
+    const userRecord = normalizeUser(inserted || newUser);
     setUsers(prev => [...prev, userRecord]);
     await sendOTP(userRecord);
   };
@@ -733,10 +805,41 @@ const loadData = async () => {
     if (u.status === "pending") {
       setCurrentUser(u); setAuthStep("pending");
     } else {
-      setCurrentUser(u);
-      setView("inventory");
-      showToast(`Welcome back, ${u.name}!`, "success");
+      setOtpValue("");
+      setPasswordValue("");
+      setOtpTarget(u);
+      setAuthStep("password");
     }
+  };
+
+  const handlePasswordVerify = async () => {
+    const password = passwordValue.trim();
+    if (!password) { showToast("Please enter your password.", "error"); return; }
+    const u = users.find(x => x.id === otpTarget?.id) || otpTarget;
+    if (!u) { showToast("Unable to verify user. Please restart login.", "error"); return; }
+
+    const passwordHash = await hashPassword(password);
+    if (u.passwordHash) {
+      if (passwordHash !== u.passwordHash) {
+        showToast("Incorrect password. Please try again.", "error");
+        return;
+      }
+    } else {
+      const { error } = await supabase.from('users').update({ password_hash: passwordHash }).eq('id', u.id);
+      if (error) {
+        console.error("Set password error:", error);
+        showToast("Unable to save password. Please try again.", "error");
+        return;
+      }
+      setUsers(prev => prev.map(x => x.id === u.id ? { ...x, passwordHash } : x));
+    }
+
+    setCurrentUser(u);
+    setAuthStep("login");
+    setView("inventory");
+    setPasswordValue("");
+    setOtpTarget(null);
+    showToast(`Welcome back, ${u.name}!`, "success");
   };
 
 const handleApproveUser = async (userId) => {
@@ -759,7 +862,7 @@ const handleApproveUser = async (userId) => {
         return;
       }
 
-      const { data, error } = await supabase.from('users').delete().match({ id: userId });
+      const { error } = await supabase.from('users').delete().match({ id: userId });
       if (!error) {
         setUsers(prev => prev.filter(u => u.id !== userId));
         showToast("User removed.", "success");
@@ -793,9 +896,9 @@ const handleAddItem = async (data) => {
   }
   
   try {
-    const { error } = await supabase.from('items').insert(insertData);
-    if (!error) {
-      setItems(prev => [...prev, normalizeItem(newItem)]);
+    const { data: inserted, error } = await supabase.from('items').insert([insertData]).select().single();
+    if (!error && inserted) {
+      setItems(prev => [...prev, normalizeItem(inserted)]);
       showToast("Item added!", "success");
     } else {
       console.error("Insert error:", error);
@@ -825,9 +928,9 @@ const handleEditItem = async (data) => {
   }
   
   try {
-    const { error } = await supabase.from('items').update(updateData).eq('id', data.id);
-    if (!error) {
-      setItems(prev => prev.map(it => it.id === data.id ? { ...it, ...updateData } : it));
+    const { data: updated, error } = await supabase.from('items').update(updateData).eq('id', data.id).select().single();
+    if (!error && updated) {
+      setItems(prev => prev.map(it => it.id === data.id ? normalizeItem(updated) : it));
       showToast("Item updated!", "success");
     } else {
       console.error("Update error:", error);
@@ -841,6 +944,11 @@ const handleEditItem = async (data) => {
 };
 
 const handleRestoreItems = async () => {
+    if (currentUser?.role !== "admin") {
+      showToast("Only admins can restore default items.", "error");
+      return;
+    }
+
     try {
       const { data: existingItems, error: fetchError } = await supabase.from('items').select('id');
       if (fetchError) throw fetchError;
@@ -886,7 +994,7 @@ const handleRestoreItems = async () => {
       return;
     }
 
-    const { data, error } = await supabase.from('items').delete().match({ id: itemId });
+    const { error } = await supabase.from('items').delete().match({ id: itemId });
     if (!error) {
       setItems(prev => prev.filter(i => i.id !== itemId));
       setTransactions(prev => prev.filter(t => t.itemId !== itemId));
@@ -922,6 +1030,18 @@ const handleCheckOut = async (itemId, quantity) => {
   setModal(null);
 };
 const handleCheckIn = async (txId) => {
+  const tx = transactions.find(t => t.id === txId);
+  if (!tx) {
+    showToast("Unable to check in item.", "error");
+    setModal(null);
+    return;
+  }
+  if (currentUser?.role !== "admin" && tx.checkedOutBy !== currentUser.id) {
+    showToast("You can only check in your own items.", "error");
+    setModal(null);
+    return;
+  }
+
   const now = new Date().toISOString();
   await supabase.from('transactions').update({
     status: "in", checked_in_by: currentUser.id,
@@ -1019,6 +1139,11 @@ const handleCheckIn = async (txId) => {
                   <input type="email" placeholder="you@example.com" value={regData.email}
                     onChange={e => setRegData(d => ({ ...d, email: e.target.value }))} />
                 </div>
+                <div className="field">
+                  <label>Password</label>
+                  <input type="password" placeholder="Create a password" value={regData.password}
+                    onChange={e => setRegData(d => ({ ...d, password: e.target.value }))} />
+                </div>
                 <button className="btn btn-primary btn-full" onClick={handleRegister}>Register & Get OTP →</button>
                 <hr className="divider" />
                 <p style={{ textAlign: "center", fontSize: 14, color: "var(--text-muted)" }}>
@@ -1045,6 +1170,36 @@ const handleCheckIn = async (txId) => {
                 <p style={{ textAlign: "center", marginTop: 16, fontSize: 13, color: "var(--text-muted)" }}>
                   Need a new code?{" "}
                   <button className="link-btn" onClick={() => sendOTP(otpTarget)}>Generate a new one</button>
+                </p>
+              </>
+            )}
+            {authStep === "password" && (
+              <>
+                <h2 className="auth-title">{otpTarget?.passwordHash ? "Enter Password" : "Set Password"}</h2>
+                <p className="auth-sub">
+                  {otpTarget?.passwordHash
+                    ? "Enter the password for your account to finish signing in."
+                    : "Create a password to finish signing in and keep your account secure."}
+                </p>
+                <div className="field">
+                  <label>Password</label>
+                  <input type="password" placeholder="Enter password" value={passwordValue}
+                    onChange={e => setPasswordValue(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && handlePasswordVerify()} />
+                </div>
+                <button className="btn btn-primary btn-full" onClick={handlePasswordVerify} disabled={passwordValue.trim().length < 4}>
+                  {otpTarget?.passwordHash ? "Verify Password →" : "Set Password →"}
+                </button>
+                <p style={{ textAlign: "center", marginTop: 16, fontSize: 13, color: "var(--text-muted)" }}>
+                  <button className="link-btn" onClick={() => {
+                    setAuthStep("login");
+                    setCurrentUser(null);
+                    setOtpTarget(null);
+                    setPasswordValue("");
+                    setOtpValue("");
+                  }}>
+                    Back to Login
+                  </button>
                 </p>
               </>
             )}
@@ -1108,39 +1263,42 @@ const handleCheckIn = async (txId) => {
           {/* ── Dashboard ── */}
           {view === "dashboard" && (
             <>
-              <div className="page-header">
-                <div className="page-header-left">
-                  <h2>Dashboard</h2>
-                  <p>Welcome back, {currentUser.name}</p>
+              <div className="dashboard-welcome">
+                <div className="welcome-content">
+                  <h1 className="welcome-title">Welcome back, {currentUser.name}! 👋</h1>
+                  <p className="welcome-subtitle">Here's what's happening with your inventory today.</p>
+                  <div className="profile-section">
+                    <div className="profile-info">
+                      <h3>{currentUser.name}</h3>
+                      <p>{currentUser.email} • {currentUser.role}</p>
+                    </div>
+                  </div>
                 </div>
-                {currentUser.role === "admin" && (
-                  <button className="btn btn-primary" onClick={() => setModal("add-item")}>+ Add Item</button>
-                )}
               </div>
               <div className="page-body">
                 <div className="stats-grid">
-                  <div className="stat-card">
+                  <div className="stat-card" onClick={() => setStatModal('total-items')}>
                     <div className="stat-icon orange">📦</div>
                     <div>
                       <div className="stat-val">{items.length}</div>
                       <div className="stat-label">Total Item Types</div>
                     </div>
                   </div>
-                  <div className="stat-card">
+                  <div className="stat-card" onClick={() => setStatModal('checked-in')}>
                     <div className="stat-icon green">✅</div>
                     <div>
                       <div className="stat-val">{transactions.filter(t => t.status === "in").length}</div>
                       <div className="stat-label">Items Checked In</div>
                     </div>
                   </div>
-                  <div className="stat-card">
+                  <div className="stat-card" onClick={() => setStatModal('checked-out')}>
                     <div className="stat-icon blue">↗️</div>
                     <div>
                       <div className="stat-val">{checkedOutCount}</div>
                       <div className="stat-label">Currently Checked Out</div>
                     </div>
                   </div>
-                  <div className="stat-card">
+                  <div className="stat-card" onClick={() => setStatModal('overdue')}>
                     <div className="stat-icon red">⚠️</div>
                     <div>
                       <div className="stat-val">{overdueCount}</div>
@@ -1199,6 +1357,9 @@ const handleCheckIn = async (txId) => {
                       </tbody>
                     </table>
                   </div>
+                </div>
+                <div className="disclaimer">
+                  This product is not affiliated with HSS, but rather created by a member.
                 </div>
               </div>
             </>
@@ -1261,7 +1422,12 @@ const handleCheckIn = async (txId) => {
                     return (
                       <div key={item.id} className="item-card">
                         {isImageSource(item.image) ? (
-                          <div className="item-card-photo"><img src={item.image} alt={item.name} /></div>
+                          <div className="item-card-photo-wrapper">
+                            <div className="item-card-photo">
+                              <img src={item.image} alt={item.name} />
+                              <button className="item-card-zoom-btn" onClick={() => setZoomImage(item.image)} aria-label="Zoom photo">🔍</button>
+                            </div>
+                          </div>
                         ) : (
                           <span className="item-card-emoji">{item.image}</span>
                         )}
@@ -1359,7 +1525,12 @@ const handleCheckIn = async (txId) => {
                     return (
                       <div key={item.id} className={`item-card ${available < 1 ? "disabled" : ""}`} style={available < 1 ? { opacity: 0.5 } : {}}>
                         {isImageSource(item.image) ? (
-                          <div className="item-card-photo"><img src={item.image} alt={item.name} /></div>
+                          <div className="item-card-photo-wrapper">
+                            <div className="item-card-photo">
+                              <img src={item.image} alt={item.name} />
+                              <button className="item-card-zoom-btn" onClick={() => setZoomImage(item.image)} aria-label="Zoom photo">🔍</button>
+                            </div>
+                          </div>
                         ) : (
                           <span className="item-card-emoji">{item.image}</span>
                         )}
@@ -1514,7 +1685,7 @@ const handleCheckIn = async (txId) => {
                               <td>
                                 <div style={{ display: "flex", gap: 8 }}>
                                   <button className="btn btn-sm btn-forest" onClick={() => handleApproveUser(u.id)}>✓ Approve</button>
-                                  <button className="btn btn-sm btn-danger" onClick={() => handleDeleteUser(u.id)}>✕ Remove</button>
+                                  <button className="btn btn-sm btn-danger" onClick={() => setModal({ type: "confirm-delete-user", userId: u.id, userName: u.name })}>✕ Remove</button>
                                 </div>
                               </td>
                             </tr>
@@ -1541,7 +1712,7 @@ const handleCheckIn = async (txId) => {
                             <td><span className={`badge badge-${u.status}`}>{u.status}</span></td>
                             <td>
                               {u.role !== "admin" && (
-                                <button className="btn btn-sm btn-danger" onClick={() => handleDeleteUser(u.id)}>Remove</button>
+                                <button className="btn btn-sm btn-danger" onClick={() => setModal({ type: "confirm-delete-user", userId: u.id, userName: u.name })}>Remove</button>
                               )}
                             </td>
                           </tr>
@@ -1620,7 +1791,115 @@ const handleCheckIn = async (txId) => {
       {modal?.type === "edit-item" && <EditItemModal item={modal.item} onClose={() => setModal(null)} onSave={handleEditItem} onDelete={handleDeleteItem} />}
       {modal?.type === "checkout" && <CheckOutModal item={modal.item} transactions={transactions} user={currentUser} onClose={() => setModal(null)} onConfirm={handleCheckOut} />}
       {modal?.type === "checkin" && <CheckInModal tx={modal.tx} onClose={() => setModal(null)} onConfirm={handleCheckIn} />}
+      {modal?.type === "confirm-delete-user" && (
+        <ConfirmDeleteUserModal
+          user={modal}
+          onClose={() => setModal(null)}
+          onConfirm={() => { handleDeleteUser(modal.userId); setModal(null); }}
+        />
+      )}
+      {statModal && (
+        <Modal title={
+          statModal === 'total-items' ? 'Total Item Types' :
+          statModal === 'checked-in' ? 'Items Checked In' :
+          statModal === 'checked-out' ? 'Currently Checked Out' :
+          'Overdue Items'
+        } onClose={() => setStatModal(null)}>
+          {statModal === 'total-items' && (
+            <div>
+              <p>You have <strong>{items.length}</strong> different item types in your inventory.</p>
+              <ul style={{ marginTop: 16 }}>
+                {items.slice(0, 10).map(item => (
+                  <li key={item.id} style={{ marginBottom: 8 }}>
+                    <strong>{item.name}</strong> - {item.category} ({item.quantity} total)
+                  </li>
+                ))}
+                {items.length > 10 && <li>... and {items.length - 10} more</li>}
+              </ul>
+            </div>
+          )}
+          {statModal === 'checked-in' && (
+            <div>
+              <p><strong>{transactions.filter(t => t.status === "in").length}</strong> items have been checked back in.</p>
+              <div style={{ maxHeight: 300, overflowY: 'auto', marginTop: 16 }}>
+                <table className="tbl">
+                  <thead><tr><th>Item</th><th>Checked In By</th><th>Date</th></tr></thead>
+                  <tbody>
+                    {transactions.filter(t => t.status === "in").slice(0, 20).map(t => (
+                      <tr key={t.id}>
+                        <td><strong>{t.itemName}</strong></td>
+                        <td>{t.checkedInByName}</td>
+                        <td>{fmtDate(t.checkInTime)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          {statModal === 'checked-out' && (
+            <div>
+              <p><strong>{checkedOutCount}</strong> items are currently checked out.</p>
+              <div style={{ maxHeight: 300, overflowY: 'auto', marginTop: 16 }}>
+                <table className="tbl">
+                  <thead><tr><th>Item</th><th>Checked Out By</th><th>Date</th></tr></thead>
+                  <tbody>
+                    {transactions.filter(t => t.status === "out").slice(0, 20).map(t => (
+                      <tr key={t.id}>
+                        <td><strong>{t.itemName}</strong></td>
+                        <td>{t.checkedOutByName}</td>
+                        <td>{fmtDate(t.checkOutTime)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+          {statModal === 'overdue' && (
+            <div>
+              <p><strong>{overdueCount}</strong> items are overdue (checked out for more than 30 days).</p>
+              <div style={{ maxHeight: 300, overflowY: 'auto', marginTop: 16 }}>
+                <table className="tbl">
+                  <thead><tr><th>Item</th><th>Checked Out By</th><th>Days Overdue</th></tr></thead>
+                  <tbody>
+                    {transactions.filter(t => t.status === "out" && daysAgo(t.checkOutTime) > 30).map(t => (
+                      <tr key={t.id}>
+                        <td><strong>{t.itemName}</strong></td>
+                        <td>{t.checkedOutByName}</td>
+                        <td><span className="badge badge-overdue">{daysAgo(t.checkOutTime)} days</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
+      {zoomImage && (
+        <div className="zoom-overlay" onClick={() => setZoomImage(null)}>
+          <div className="zoom-content" onClick={e => e.stopPropagation()}>
+            <img src={zoomImage} alt="Item zoom" />
+            <button className="btn btn-sm btn-ghost" style={{ marginTop: 16 }} onClick={() => setZoomImage(null)}>Close</button>
+          </div>
+        </div>
+      )}
     </>
+  );
+}
+
+function ConfirmDeleteUserModal({ user, onClose, onConfirm }) {
+  return (
+    <Modal title="Confirm User Removal" onClose={onClose}
+      footer={<><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-danger" onClick={onConfirm}>Remove User</button></>}>
+      <div style={{ marginBottom: 18 }}>
+        Are you sure you want to remove <strong>{user.userName}</strong> from the system?
+      </div>
+      <div style={{ color: "var(--text-muted)", fontSize: 14 }}>
+        This action cannot be undone and will also remove any related checkout and approval history for this user.
+      </div>
+    </Modal>
   );
 }
 

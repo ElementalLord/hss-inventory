@@ -202,12 +202,16 @@ CREATE TABLE users (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,
+  password_hash TEXT,
   role TEXT CHECK (role IN ('admin', 'user')),
   status TEXT CHECK (status IN ('pending', 'approved')),
   otp_code TEXT,               -- NEW
   otp_expires_at TIMESTAMP,    -- NEW
   created_at TIMESTAMP DEFAULT NOW()
 );
+
+-- If the user table already exists, add the new column with:
+-- ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
 ```
 
 ---

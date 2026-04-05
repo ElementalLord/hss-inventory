@@ -43,10 +43,17 @@ CREATE TABLE users (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,
+  password_hash TEXT,
   role TEXT CHECK (role IN ('admin', 'user')),
   status TEXT CHECK (status IN ('pending', 'approved')),
   created_at TIMESTAMP DEFAULT NOW()
 );
+
+-- If this column does not yet exist in your Supabase project, run one of these:
+-- 1) In Supabase SQL editor:
+--    ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;
+-- 2) From project root with Supabase CLI:
+--    supabase db query ./supabase/migrations/20260405_add_password_hash.sql
 ```
 
 #### Items Table
