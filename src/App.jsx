@@ -298,22 +298,22 @@ const css = `
   }
   .app-layout.mobile-mode .sidebar-nav {
     padding: 8px 10px 10px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+    overflow-x: visible;
   }
   .app-layout.mobile-mode .nav-section {
     margin-bottom: 0;
     display: flex;
     align-items: center;
     gap: 8px;
-    min-width: max-content;
+    flex-wrap: wrap;
+    min-width: 0;
   }
   .app-layout.mobile-mode .nav-label {
     display: none;
   }
   .app-layout.mobile-mode .nav-item {
     width: auto;
-    min-width: max-content;
+    min-width: 0;
     white-space: nowrap;
     padding: 8px 12px;
     margin-bottom: 0;
@@ -327,7 +327,7 @@ const css = `
     color: #fff;
   }
   .app-layout.mobile-mode .sidebar-user {
-    padding: 10px 14px;
+    display: none;
   }
   .app-layout.mobile-mode .main-content { margin-left: 0; }
   .app-layout.mobile-mode .page-header { padding: 16px; flex-direction: column; align-items: stretch; gap: 12px; }
@@ -2080,16 +2080,7 @@ function AddItemModal({ onClose, onSave }) {
 
       <div className="field">
         <label>Upload Item Photo</label>
-        <div className="row-2">
-          <div className="field" style={{ marginBottom: 0 }}>
-            <label style={{ marginBottom: 6 }}>From Files</label>
-            <input type="file" accept="image/*" onChange={e => handleImageFile(e.target.files?.[0])} />
-          </div>
-          <div className="field" style={{ marginBottom: 0 }}>
-            <label style={{ marginBottom: 6 }}>Use Camera</label>
-            <input type="file" accept="image/*" capture="environment" onChange={e => handleImageFile(e.target.files?.[0])} />
-          </div>
-        </div>
+        <input type="file" accept="image/*" onChange={e => handleImageFile(e.target.files?.[0])} />
         {isImageSource(form.image) && (
           <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 12 }}>
             <img src={form.image} alt="Preview" style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 10, border: "1px solid var(--border)" }} />
@@ -2187,16 +2178,7 @@ function EditItemModal({ item, onClose, onSave, onDelete }) {
 
       <div className="field">
         <label>Upload Item Photo</label>
-        <div className="row-2">
-          <div className="field" style={{ marginBottom: 0 }}>
-            <label style={{ marginBottom: 6 }}>From Files</label>
-            <input type="file" accept="image/*" onChange={e => handleImageFile(e.target.files?.[0])} />
-          </div>
-          <div className="field" style={{ marginBottom: 0 }}>
-            <label style={{ marginBottom: 6 }}>Use Camera</label>
-            <input type="file" accept="image/*" capture="environment" onChange={e => handleImageFile(e.target.files?.[0])} />
-          </div>
-        </div>
+        <input type="file" accept="image/*" onChange={e => handleImageFile(e.target.files?.[0])} />
         {isImageSource(form.image) && (
           <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 12 }}>
             <img src={form.image} alt="Preview" style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 10, border: "1px solid var(--border)" }} />
