@@ -280,6 +280,8 @@ const css = `
     flex-direction: column;
     overflow: visible;
     z-index: 120;
+    background: linear-gradient(180deg, #153425 0%, #1A3A2A 100%);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.18);
   }
   .app-layout.mobile-mode .sidebar-logo {
     padding: 12px 14px 8px;
@@ -315,11 +317,12 @@ const css = `
     width: auto;
     min-width: 0;
     white-space: nowrap;
-    padding: 8px 12px;
+    padding: 7px 11px;
     margin-bottom: 0;
     border: 1px solid rgba(255,255,255,0.16);
-    background: rgba(255,255,255,0.05);
+    background: rgba(255,255,255,0.08);
     color: rgba(255,255,255,0.92);
+    font-size: 13px;
   }
   .app-layout.mobile-mode .nav-item.active {
     border-color: rgba(255,255,255,0.22);
@@ -330,15 +333,25 @@ const css = `
     display: none;
   }
   .app-layout.mobile-mode .main-content { margin-left: 0; }
-  .app-layout.mobile-mode .page-header { padding: 16px; flex-direction: column; align-items: stretch; gap: 12px; }
-  .app-layout.mobile-mode .page-body { padding: 12px; }
-  .app-layout.mobile-mode .stats-grid { grid-template-columns: 1fr; }
+  .app-layout.mobile-mode .page-header { padding: 12px; flex-direction: column; align-items: stretch; gap: 10px; }
+  .app-layout.mobile-mode .page-header-left h2 { font-size: 21px; }
+  .app-layout.mobile-mode .page-header-left p { font-size: 12px; }
+  .app-layout.mobile-mode .page-body { padding: 10px; }
+  .app-layout.mobile-mode .stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .app-layout.mobile-mode .stat-card { padding: 14px; gap: 10px; min-height: 86px; }
+  .app-layout.mobile-mode .stat-icon { width: 34px; height: 34px; font-size: 16px; }
+  .app-layout.mobile-mode .stat-val { font-size: 23px; }
+  .app-layout.mobile-mode .stat-label { font-size: 11px; line-height: 1.2; }
   .app-layout.mobile-mode .items-grid { grid-template-columns: 1fr; }
+  .app-layout.mobile-mode .item-card { padding: 14px; }
+  .app-layout.mobile-mode .item-card-photo { height: 138px; border-radius: 14px; }
   .app-layout.mobile-mode .toolbar { flex-direction: column; align-items: stretch; gap: 8px; }
   .app-layout.mobile-mode .filter-select,
   .app-layout.mobile-mode .search-wrap { width: 100%; min-width: auto; }
+  .app-layout.mobile-mode .search-wrap input { height: 48px; font-size: 15px; padding-left: 46px; }
+  .app-layout.mobile-mode .search-icon { left: 15px; }
   .app-layout.mobile-mode .card-body { overflow-x: auto; }
-  .app-layout.mobile-mode .tbl { min-width: 640px; }
+  .app-layout.mobile-mode .tbl { min-width: 520px; }
 
   /* ── Disclaimer ── */
   .disclaimer { text-align: center; padding: 16px; background: var(--warm-gray); border-radius: var(--radius); margin-top: 32px; font-size: 12px; color: var(--text-muted); }
@@ -517,6 +530,7 @@ const css = `
     .cloud-divider { max-width: 220px; margin-top: 2px; }
     .otp-code { font-size: 28px; }
     .otp-input { width: 44px; height: 48px; font-size: 20px; }
+    .app-layout.mobile-mode .stats-grid { grid-template-columns: 1fr; }
   }
 `;
 
@@ -2080,7 +2094,7 @@ function AddItemModal({ onClose, onSave }) {
 
       <div className="field">
         <label>Upload Item Photo</label>
-        <input type="file" accept="image/*" onChange={e => handleImageFile(e.target.files?.[0])} />
+        <input type="file" accept=".jpg,.jpeg,.png,.webp,.heic" onChange={e => handleImageFile(e.target.files?.[0])} />
         {isImageSource(form.image) && (
           <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 12 }}>
             <img src={form.image} alt="Preview" style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 10, border: "1px solid var(--border)" }} />
@@ -2178,7 +2192,7 @@ function EditItemModal({ item, onClose, onSave, onDelete }) {
 
       <div className="field">
         <label>Upload Item Photo</label>
-        <input type="file" accept="image/*" onChange={e => handleImageFile(e.target.files?.[0])} />
+        <input type="file" accept=".jpg,.jpeg,.png,.webp,.heic" onChange={e => handleImageFile(e.target.files?.[0])} />
         {isImageSource(form.image) && (
           <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 12 }}>
             <img src={form.image} alt="Preview" style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 10, border: "1px solid var(--border)" }} />
