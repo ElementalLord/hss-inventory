@@ -62,6 +62,14 @@ const isImageSource = (value) => typeof value === "string" && (value.startsWith(
 
 const uid = () => Math.random().toString(36).slice(2, 9);
 
+const toLocalDateKey = (value) => {
+  const d = value ? new Date(value) : new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
 const hashPassword = async (password) => {
   if (!password) return "";
   const encoder = new TextEncoder();
@@ -371,13 +379,16 @@ const css = `
   .low-stock-item p { margin-top: 4px; color: #7a5a3a; font-size: 12px; }
   .history-filters { margin-bottom: 14px; }
   .history-filters .filter-select { min-width: 180px; }
+  .history-date-filter { display: flex; flex-direction: column; gap: 4px; min-width: 180px; }
+  .history-date-filter label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .history-date-filter small { font-size: 11px; color: var(--text-muted); line-height: 1.3; }
   .history-count-note { color: var(--text-muted); font-size: 12px; margin-top: 8px; }
   .reservations-panel { margin-top: 18px; }
   .reservations-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
   .reservation-card { border: 1px solid var(--border); border-radius: 10px; background: #fff; padding: 12px; }
   .reservation-card h4 { font-size: 14px; color: var(--forest); margin-bottom: 4px; }
   .reservation-meta { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
-  .reservation-actions { margin-top: 10px; display: flex; justify-content: flex-end; }
+  .reservation-actions { margin-top: 10px; display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 
 
   /* ── Cards ── */
@@ -488,6 +499,7 @@ const css = `
   }
   .toast.success { background: #1E7A45; }
   .toast.error { background: var(--danger); }
+  .toast.warning { background: var(--warning); }
 
   /* ── OTP ── */
   .otp-row { display: flex; gap: 10px; justify-content: center; margin: 24px 0; }
@@ -1420,18 +1432,45 @@ const handleCheckOut = async (itemId, quantity, dueDateIso) => {
   }
   const requestedQty = Math.max(1, Number(quantity) || 1);
   const todayStart = new Date(new Date().toDateString());
+  const todayKey = toLocalDateKey();
   const totalOut = transactions
     .filter(t => t.itemId === itemId && t.status === "out")
     .reduce((s, t) => s + Number(t.quantity || 0), 0);
-  const alreadyReserved = reservations
-    .filter(r => r.itemId === itemId && r.status === "active" && new Date(r.reservedFor) >= todayStart)
-    .reduce((s, r) => s + Number(r.quantity || 0), 0);
-  const available = Math.max(0, Number(item.quantity || 0) - totalOut - alreadyReserved);
+  const available = Math.max(0, Number(item.quantity || 0) - totalOut);
   if (requestedQty > available) {
-    showToast(`Cannot check out ${requestedQty}. Only ${available} available after reservations.`, "error");
+    showToast(`Cannot check out ${requestedQty}. Only ${available} currently available.`, "error");
     return;
   }
-  const dueDate = dueDateIso || new Date(Date.now() + 30 * 86400000).toISOString();
+
+  const nextReservation = [...reservations]
+    .filter(r => r.itemId === itemId && r.status === "active" && String(r.reservedFor || "").slice(0, 10) >= todayKey)
+    .sort((a, b) => String(a.reservedFor).localeCompare(String(b.reservedFor)))[0];
+
+  let dueDate = dueDateIso || new Date(Date.now() + 30 * 86400000).toISOString();
+  if (nextReservation) {
+    const reservationDate = new Date(`${String(nextReservation.reservedFor).slice(0, 10)}T00:00:00`);
+    const mustReturnBy = new Date(reservationDate);
+    mustReturnBy.setDate(mustReturnBy.getDate() - 1);
+    mustReturnBy.setHours(23, 59, 59, 999);
+
+    if (mustReturnBy.getTime() < todayStart.getTime()) {
+      showToast(
+        `This item is reserved for ${nextReservation.reservedFor} by ${nextReservation.reservedByName || "another user"}. It cannot be checked out now because the return-by deadline has passed.`,
+        "error"
+      );
+      return;
+    }
+
+    if (new Date(dueDate) > mustReturnBy) {
+      dueDate = mustReturnBy.toISOString();
+    }
+
+    showToast(
+      `Warning: ${item.name} is reserved for ${nextReservation.reservedFor}. Return it by ${mustReturnBy.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} (one day before reservation).`,
+      "warning"
+    );
+  }
+
   const tx = {
     id: uid(), item_id: itemId, item_name: item.name, quantity: requestedQty,
     checked_out_by: currentUser.id, checked_out_by_name: currentUser.name,
@@ -1574,6 +1613,53 @@ const handleCancelReservation = async (reservationId) => {
 
   setReservations(prev => prev.map(r => r.id === reservationId ? { ...r, status: 'cancelled' } : r));
   showToast("Reservation cancelled.", "success");
+};
+
+const handleWithdrawReservation = async (reservationId, withdrawQty) => {
+  const row = reservations.find(r => r.id === reservationId);
+  if (!row || row.status !== "active") return;
+
+  const canEdit = currentUser?.role === "admin" || row.reservedBy === currentUser?.id;
+  if (!canEdit) {
+    showToast("You can only withdraw from your own reservations.", "error");
+    return;
+  }
+
+  const todayKey = toLocalDateKey();
+  const reservationDay = String(row.reservedFor || "").slice(0, 10);
+  if (reservationDay !== todayKey) {
+    showToast("You can only withdraw on the exact date this reservation is for.", "error");
+    return;
+  }
+
+  const qty = Math.max(1, Number(withdrawQty) || 1);
+  if (qty > Number(row.quantity || 0)) {
+    showToast(`You can withdraw at most ${row.quantity} from this reservation.`, "error");
+    return;
+  }
+
+  const remaining = Number(row.quantity || 0) - qty;
+  const updates = remaining > 0
+    ? { quantity: remaining }
+    : { quantity: 0, status: "cancelled" };
+
+  const { error } = await supabase
+    .from("item_reservations")
+    .update(updates)
+    .eq("id", reservationId);
+
+  if (error) {
+    showToast("Unable to withdraw reservation quantity.", "error");
+    return;
+  }
+
+  setReservations(prev => prev.map(r => {
+    if (r.id !== reservationId) return r;
+    if (remaining > 0) return { ...r, quantity: remaining };
+    return { ...r, quantity: 0, status: "cancelled" };
+  }));
+  showToast(remaining > 0 ? `Withdrew ${qty}. ${remaining} still reserved.` : "Reservation fully withdrawn.", "success");
+  setModal(null);
 };
 
   // ── Views ──
@@ -1765,11 +1851,27 @@ const handleCancelReservation = async (reservationId) => {
   const myOpenTransactions = transactions.filter(t => t.status === "out" && t.checkedOutBy === currentUser.id);
   const allOpenTransactions = transactions.filter(t => t.status === "out");
   const filteredTransactions = currentUser.role === "admin" ? transactions : transactions.filter(t => t.checkedOutBy === currentUser.id);
-  const activeReservations = reservations.filter(r => r.status === "active" && new Date(r.reservedFor) >= new Date(new Date().toDateString()));
+  const todayDateKey = toLocalDateKey();
+  const activeReservations = reservations.filter(r => r.status === "active" && String(r.reservedFor || "").slice(0, 10) >= todayDateKey);
   const reservedQtyByItem = activeReservations.reduce((acc, r) => {
     acc[r.itemId] = (acc[r.itemId] || 0) + Number(r.quantity || 0);
     return acc;
   }, {});
+
+  const closestReturnByItem = transactions
+    .filter(t => t.status === "out")
+    .reduce((acc, t) => {
+      const dueIso = dueDateByTx[t.id] || new Date(new Date(t.checkOutTime).getTime() + 30 * 86400000).toISOString();
+      const prev = acc[t.itemId];
+      if (!prev || new Date(dueIso) < new Date(prev.dueDateIso)) {
+        acc[t.itemId] = {
+          dueDateIso: dueIso,
+          checkedOutByName: t.checkedOutByName || "Unknown",
+          quantity: Number(t.quantity || 0),
+        };
+      }
+      return acc;
+    }, {});
 
   const lowStockItems = items
     .map((item) => {
@@ -2057,7 +2159,8 @@ const handleCancelReservation = async (reservationId) => {
                     const outTxs = transactions.filter(t => t.itemId === item.id && t.status === "out");
                     const totalOut = outTxs.reduce((s, t) => s + t.quantity, 0);
                     const reserved = reservedQtyByItem[item.id] || 0;
-                    const available = Math.max(0, item.quantity - totalOut - reserved);
+                    const available = Math.max(0, item.quantity - totalOut);
+                    const closestReturn = closestReturnByItem[item.id];
                     const zone = item.siteId && item.zoneId ? SITES.find(s => s.id === item.siteId)?.zones.find(z => z.id === item.zoneId) : null;
                     return (
                       <div key={item.id} className="item-card">
@@ -2094,6 +2197,11 @@ const handleCancelReservation = async (reservationId) => {
                             <div className="item-card-qty-label">Reserved</div>
                           </div>
                         </div>
+                        {available < 1 && closestReturn && (
+                          <div className="info-box" style={{ marginTop: 12, marginBottom: 0, padding: "10px 12px" }}>
+                            Closest return: <strong>{closestReturn.checkedOutByName}</strong> by <strong>{fmtDate(closestReturn.dueDateIso)}</strong> (qty {closestReturn.quantity}).
+                          </div>
+                        )}
                         <div className="item-card-actions">
                           <button className="btn btn-sm btn-primary" disabled={available < 1}
                             onClick={() => setModal({ type: "checkout", item })}>
@@ -2133,13 +2241,16 @@ const handleCancelReservation = async (reservationId) => {
                           .slice(0, 24)
                           .map((r) => {
                             const canCancel = currentUser.role === "admin" || r.reservedBy === currentUser.id;
+                            const canWithdrawToday = String(r.reservedFor || "").slice(0, 10) === todayDateKey;
                             return (
                               <div key={r.id} className="reservation-card">
                                 <h4>{r.itemName || "Reserved Item"}</h4>
                                 <div className="reservation-meta">Qty: {r.quantity}</div>
                                 <div className="reservation-meta">For: {r.reservedFor}</div>
                                 <div className="reservation-meta">By: {r.reservedByName || "Unknown"}</div>
+                                {!canWithdrawToday && <div className="reservation-meta">Withdraw opens on {r.reservedFor}</div>}
                                 <div className="reservation-actions">
+                                  <button className="btn btn-sm btn-secondary" onClick={() => setModal({ type: "withdraw-reservation", reservation: r })} disabled={!canCancel || !canWithdrawToday}>Withdraw Qty</button>
                                   <button className="btn btn-sm btn-ghost" onClick={() => handleCancelReservation(r.id)} disabled={!canCancel}>Cancel Reservation</button>
                                 </div>
                               </div>
@@ -2198,7 +2309,8 @@ const handleCancelReservation = async (reservationId) => {
                   {filteredItems.map(item => {
                     const totalOut = transactions.filter(t => t.itemId === item.id && t.status === "out").reduce((s, t) => s + t.quantity, 0);
                     const reserved = reservedQtyByItem[item.id] || 0;
-                    const available = Math.max(0, item.quantity - totalOut - reserved);
+                    const available = Math.max(0, item.quantity - totalOut);
+                    const closestReturn = closestReturnByItem[item.id];
                     const zone = SITES.find(s => s.id === item.siteId)?.zones.find(z => z.id === item.zoneId);
                     return (
                       <div key={item.id} className={`item-card ${available < 1 ? "disabled" : ""}`} style={available < 1 ? { opacity: 0.5 } : {}}>
@@ -2225,6 +2337,11 @@ const handleCancelReservation = async (reservationId) => {
                           <div className="item-card-qty">{available}</div>
                           <div className="item-card-qty-label">Available of {item.quantity} ({reserved} reserved)</div>
                         </div>
+                        {available < 1 && closestReturn && (
+                          <div className="info-box" style={{ marginTop: 12, marginBottom: 0, padding: "10px 12px" }}>
+                            Closest return: <strong>{closestReturn.checkedOutByName}</strong> by <strong>{fmtDate(closestReturn.dueDateIso)}</strong> (qty {closestReturn.quantity}).
+                          </div>
+                        )}
                         <div className="item-card-actions">
                           <button className="btn btn-sm btn-primary" disabled={available < 1}
                             onClick={() => setModal({ type: "checkout", item })}>
@@ -2324,8 +2441,28 @@ const handleCancelReservation = async (reservationId) => {
                     {historyItemOptions.map(name => <option key={name} value={name}>{name}</option>)}
                   </select>
                   <input className="filter-select" type="text" placeholder="Filter by person" value={historyPersonFilter} onChange={e => setHistoryPersonFilter(e.target.value)} />
-                  <input className="filter-select" type="date" value={historyFromDate} onChange={e => setHistoryFromDate(e.target.value)} />
-                  <input className="filter-select" type="date" value={historyToDate} onChange={e => setHistoryToDate(e.target.value)} />
+                  <div className="history-date-filter">
+                    <label htmlFor="history-start-date">Start date</label>
+                    <input
+                      id="history-start-date"
+                      className="filter-select"
+                      type="date"
+                      value={historyFromDate}
+                      onChange={e => setHistoryFromDate(e.target.value)}
+                    />
+                    <small>Includes records on or after this date.</small>
+                  </div>
+                  <div className="history-date-filter">
+                    <label htmlFor="history-end-date">End date</label>
+                    <input
+                      id="history-end-date"
+                      className="filter-select"
+                      type="date"
+                      value={historyToDate}
+                      onChange={e => setHistoryToDate(e.target.value)}
+                    />
+                    <small>Includes records up to and including this date.</small>
+                  </div>
                   <button className="btn btn-ghost" onClick={() => {
                     setHistoryStatusFilter("all");
                     setHistoryItemFilter("all");
@@ -2509,12 +2646,13 @@ const handleCancelReservation = async (reservationId) => {
       {/* ── Modals ── */}
       {modal === "add-item" && <AddItemModal onClose={() => setModal(null)} onSave={handleAddItem} />}
       {modal?.type === "edit-item" && <EditItemModal item={modal.item} onClose={() => setModal(null)} onSave={handleEditItem} onDelete={handleDeleteItem} />}
-      {modal?.type === "checkout" && <CheckOutModal item={modal.item} transactions={transactions} user={currentUser} onClose={() => setModal(null)} onConfirm={handleCheckOut} onReserve={handleReserveItem} reservedQty={reservedQtyByItem[modal.item.id] || 0} />}
+      {modal?.type === "checkout" && <CheckOutModal item={modal.item} transactions={transactions} reservations={reservations} user={currentUser} onClose={() => setModal(null)} onConfirm={handleCheckOut} onOpenReserve={(itemToReserve, suggestedQty) => setModal({ type: "reserve", item: itemToReserve, suggestedQty })} reservedQty={reservedQtyByItem[modal.item.id] || 0} />}
       {modal?.type === "reserve" && (
         <ReserveItemModal
           item={modal.item}
           onClose={() => setModal(null)}
           onReserve={handleReserveItem}
+          initialQty={modal.suggestedQty}
           maxQty={Math.max(
             0,
             Number(modal.item?.quantity || 0) -
@@ -2524,6 +2662,13 @@ const handleCancelReservation = async (reservationId) => {
         />
       )}
       {modal?.type === "checkin" && <CheckInModal tx={modal.tx} onClose={() => setModal(null)} onConfirm={handleCheckIn} />}
+      {modal?.type === "withdraw-reservation" && (
+        <WithdrawReservationModal
+          reservation={modal.reservation}
+          onClose={() => setModal(null)}
+          onWithdraw={handleWithdrawReservation}
+        />
+      )}
       {modal?.type === "confirm-delete-user" && (
         <ConfirmDeleteUserModal
           user={modal}
@@ -2839,16 +2984,28 @@ function EditItemModal({ item, onClose, onSave, onDelete }) {
 }
 
 // ── Check Out Modal ───────────────────────────────────────────────────────────
-function CheckOutModal({ item, transactions, user, onClose, onConfirm, onReserve, reservedQty = 0 }) {
+function CheckOutModal({ item, transactions, reservations, user, onClose, onConfirm, onOpenReserve, reservedQty = 0 }) {
   const totalOut = transactions.filter(t => t.itemId === item.id && t.status === "out").reduce((s, t) => s + t.quantity, 0);
-  const available = Math.max(0, item.quantity - totalOut - reservedQty);
+  const available = Math.max(0, item.quantity - totalOut);
   const [qtyInput, setQtyInput] = useState("1");
-  const [dueDays, setDueDays] = useState("30");
-  const [reserveDate, setReserveDate] = useState("");
+  const [returnDate, setReturnDate] = useState(() => new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10));
   const zone = SITES.find(s => s.id === item.siteId)?.zones.find(z => z.id === item.zoneId);
   const parsedQty = Number.parseInt(qtyInput, 10);
   const safeQty = Number.isNaN(parsedQty) ? 0 : parsedQty;
   const invalidQty = safeQty < 1 || safeQty > available;
+  const todayDate = toLocalDateKey();
+  const invalidReturnDate = !returnDate || returnDate < todayDate;
+  const todayKey = toLocalDateKey();
+  const nextReservation = [...(reservations || [])]
+    .filter(r => r.itemId === item.id && r.status === "active" && String(r.reservedFor || "").slice(0, 10) >= todayKey)
+    .sort((a, b) => String(a.reservedFor).localeCompare(String(b.reservedFor)))[0];
+  const returnByDate = nextReservation ? (() => {
+    const reservationDate = new Date(`${String(nextReservation.reservedFor).slice(0, 10)}T00:00:00`);
+    const d = new Date(reservationDate);
+    d.setDate(d.getDate() - 1);
+    d.setHours(23, 59, 59, 999);
+    return d;
+  })() : null;
 
   const normalizeQtyInput = () => {
     const clamped = Math.min(available, Math.max(1, safeQty || 1));
@@ -2857,10 +3014,16 @@ function CheckOutModal({ item, transactions, user, onClose, onConfirm, onReserve
   
   return (
     <Modal title={`Check Out: ${item.name}`} onClose={onClose}
-      footer={<><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-secondary" onClick={() => { const fallbackReserve = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10); onReserve(item.id, safeQty || 1, reserveDate || fallbackReserve); }} disabled={invalidQty || available < 1}>Reserve Instead</button><button className="btn btn-primary" onClick={() => { if (!invalidQty) { const dueDateIso = new Date(Date.now() + Math.max(1, Number(dueDays) || 30) * 86400000).toISOString(); onConfirm(item.id, safeQty, dueDateIso); } }} disabled={invalidQty}>Confirm Check Out</button></>}>
+      footer={<><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-secondary" onClick={() => onOpenReserve(item, safeQty || 1)} disabled={invalidQty || available < 1}>Reserve Instead</button><button className="btn btn-primary" onClick={() => { if (!invalidQty && !invalidReturnDate) { const dueDateIso = new Date(`${returnDate}T23:59:59`).toISOString(); onConfirm(item.id, safeQty, dueDateIso); } }} disabled={invalidQty || invalidReturnDate}>Confirm Check Out</button></>}>
       <div className="info-box">
         <strong>{user.name}</strong> will be checking out this item on {new Date().toLocaleString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}.
       </div>
+      {nextReservation && returnByDate && (
+        <div className="info-box" style={{ background: "#FFF8E0", borderColor: "#F4DE9B", color: "#7A5A00" }}>
+          ⚠️ This item is reserved by <strong>{nextReservation.reservedByName || "another user"}</strong> for <strong>{nextReservation.reservedFor}</strong>.
+          You can still check it out, but it must be returned by <strong>{fmtDate(returnByDate.toISOString())}</strong> (one day before the reservation date).
+        </div>
+      )}
       <div style={{ display: "flex", gap: 20, marginBottom: 20 }}>
         <div><div style={{ fontSize: 28, fontFamily: "Playfair Display", color: "var(--saffron)" }}>{available}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>Available</div></div>
         <div><div style={{ fontSize: 28, fontFamily: "Playfair Display", color: "var(--text-muted)" }}>{item.quantity}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>Total Stock</div></div>
@@ -2876,10 +3039,8 @@ function CheckOutModal({ item, transactions, user, onClose, onConfirm, onReserve
           onBlur={normalizeQtyInput}
         />
       </div>
-      <div className="row-2">
-        <div className="field"><label>Due in (days)</label><input type="number" min={1} max={180} value={dueDays} onChange={e => setDueDays(e.target.value)} /></div>
-        <div className="field"><label>Reserve Date (optional)</label><input type="date" value={reserveDate} onChange={e => setReserveDate(e.target.value)} /></div>
-      </div>
+      <div className="field"><label>Return By Date</label><input type="date" min={todayDate} value={returnDate} onChange={e => setReturnDate(e.target.value)} /></div>
+      {invalidReturnDate && <div style={{ color: "var(--danger)", fontSize: 13 }}>Please choose today or a future return date.</div>}
       <div className="row-2">
         <div className="field"><label>Zone</label><input value={zone?.name || ""} disabled /></div>
         <div className="field"><label>Exact Location</label><input value={item.locationDescription} disabled /></div>
@@ -2920,8 +3081,9 @@ function CheckInModal({ tx, onClose, onConfirm }) {
   );
 }
 
-function ReserveItemModal({ item, onClose, onReserve, maxQty = 0 }) {
-  const [qty, setQty] = useState("1");
+function ReserveItemModal({ item, onClose, onReserve, maxQty = 0, initialQty = 1 }) {
+  const initialQtySafe = Math.max(1, Number(initialQty) || 1);
+  const [qty, setQty] = useState(String(initialQtySafe));
   const [reservedFor, setReservedFor] = useState("");
   const parsedQty = Math.max(1, Number(qty) || 1);
   const invalidQty = parsedQty > maxQty;
@@ -2936,6 +3098,47 @@ function ReserveItemModal({ item, onClose, onReserve, maxQty = 0 }) {
         <div className="field"><label>Reserved For Date</label><input type="date" value={reservedFor} onChange={e => setReservedFor(e.target.value)} /></div>
       </div>
       {invalidQty && <div style={{ color: "var(--danger)", fontSize: 13 }}>Quantity cannot exceed available stock.</div>}
+    </Modal>
+  );
+}
+
+function WithdrawReservationModal({ reservation, onClose, onWithdraw }) {
+  const [qty, setQty] = useState("1");
+  const parsedQty = Number.parseInt(qty, 10);
+  const safeQty = Number.isNaN(parsedQty) ? 0 : parsedQty;
+  const invalidQty = safeQty < 1 || safeQty > Number(reservation?.quantity || 0);
+  const isToday = String(reservation?.reservedFor || "").slice(0, 10) === toLocalDateKey();
+
+  return (
+    <Modal
+      title={`Withdraw: ${reservation?.itemName || "Reservation"}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={() => onWithdraw(reservation.id, safeQty)} disabled={!isToday || invalidQty}>Confirm Withdraw</button>
+        </>
+      }
+    >
+      <div className="info-box" style={{ marginBottom: 12 }}>
+        Reserved for <strong>{reservation?.reservedFor}</strong> by <strong>{reservation?.reservedByName || "Unknown"}</strong>.
+      </div>
+      {!isToday && (
+        <div className="info-box" style={{ background: "#FFF8E0", borderColor: "#F4DE9B", color: "#7A5A00" }}>
+          Withdrawals are only allowed on the reservation date.
+        </div>
+      )}
+      <div className="field">
+        <label>Withdraw quantity (max {reservation?.quantity || 0})</label>
+        <input
+          type="number"
+          min={1}
+          max={Math.max(1, Number(reservation?.quantity || 0))}
+          value={qty}
+          onChange={e => setQty(e.target.value)}
+        />
+      </div>
+      {invalidQty && <div style={{ color: "var(--danger)", fontSize: 13 }}>Enter a quantity between 1 and {reservation?.quantity || 0}.</div>}
     </Modal>
   );
 }
