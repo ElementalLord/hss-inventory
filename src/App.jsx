@@ -31,6 +31,7 @@ const SEED_USERS = [
 ];
 
 const CATEGORIES = ["Ghosh", "Sharirikh", "Kitchen", "Decoration", "Food", "Audio/Visual", "Sports", "Office", "Camping", "Other"]; 
+const ITEM_CONDITIONS = ["Excellent", "Good", "Fair", "Needs Cleaning", "Minor Damage", "Damaged", "Out of Service"];
 
 const EMOJI_PICKER = ["📦", "🎺", "🪘", "🎶", "🎉", "🥄", "🍴", "🧵", "⚽", "🪑", "📚", "✏️", "🎓", "🏃", "⛹️", "🧘", "🍳", "🥘", "🎂", "🍕", "🏆", "🎁", "🕯️", "💡", "🔧", "🧰", "📺", "🎮", "🎥", "📷", "🎤", "🎧", "🪕", "🎼", "🏮", "🪔", "👕", "👖", "👗", "🧥", "🎩", "🧢", "🎒", "🛶", "🏕️", "⛺", "🧺", "🧯", "🧻", "🧼", "🪣", "🔌", "🖥️", "🖨️", "📺", "📻", "🥣", "🥢", "🥡", "🍹", "🔔", "🪁", "🎯", "🧢", "🧦", "🩳", "👟", "🧥", "📂", "📎", "🗂️"]; 
 
@@ -352,9 +353,31 @@ const css = `
   .app-layout.mobile-mode .search-icon { left: 15px; }
   .app-layout.mobile-mode .card-body { overflow-x: auto; }
   .app-layout.mobile-mode .tbl { min-width: 520px; }
+  .app-layout.mobile-mode .reservations-grid { grid-template-columns: 1fr; }
+  .app-layout.mobile-mode .reservation-card { padding: 12px 10px; }
 
   /* ── Disclaimer ── */
   .disclaimer { text-align: center; padding: 16px; background: var(--warm-gray); border-radius: var(--radius); margin-top: 32px; font-size: 12px; color: var(--text-muted); }
+
+  .low-stock-card { margin-bottom: 18px; }
+  .low-stock-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+  .low-stock-item {
+    border: 1px solid #f1d6b7;
+    background: #fff8f1;
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .low-stock-item strong { color: #9a4f00; font-size: 14px; }
+  .low-stock-item p { margin-top: 4px; color: #7a5a3a; font-size: 12px; }
+  .history-filters { margin-bottom: 14px; }
+  .history-filters .filter-select { min-width: 180px; }
+  .history-count-note { color: var(--text-muted); font-size: 12px; margin-top: 8px; }
+  .reservations-panel { margin-top: 18px; }
+  .reservations-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+  .reservation-card { border: 1px solid var(--border); border-radius: 10px; background: #fff; padding: 12px; }
+  .reservation-card h4 { font-size: 14px; color: var(--forest); margin-bottom: 4px; }
+  .reservation-meta { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+  .reservation-actions { margin-top: 10px; display: flex; justify-content: flex-end; }
 
 
   /* ── Cards ── */
@@ -383,10 +406,10 @@ const css = `
   .badge-cat { background: var(--saffron-pale); color: var(--saffron); }
 
   /* ── Item Card (grid) ── */
-  .items-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+  .items-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
   .item-card {
     background: var(--white); border-radius: var(--radius); border: 1px solid var(--border);
-    box-shadow: var(--shadow); padding: 20px; cursor: pointer; transition: all 0.2s;
+    box-shadow: var(--shadow); padding: 20px; cursor: pointer; transition: all 0.2s; min-height: 340px;
   }
   .item-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); border-color: var(--saffron); }
   .item-card-emoji { font-size: 32px; margin-bottom: 12px; display: block; }
@@ -408,7 +431,8 @@ const css = `
   .item-card-meta { font-size: 12px; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
   .item-card-qty { font-size: 24px; font-family: 'Playfair Display', serif; color: var(--saffron); font-weight: 700; }
   .item-card-qty-label { font-size: 11px; color: var(--text-muted); }
-  .item-card-actions { display: flex; gap: 8px; margin-top: 14px; border-top: 1px solid var(--border); padding-top: 14px; }
+  .item-card-actions { display: flex; gap: 8px; margin-top: 14px; border-top: 1px solid var(--border); padding-top: 14px; flex-wrap: wrap; }
+  .item-card-actions .btn { flex: 1 1 120px; justify-content: center; min-width: 0; }
 
   /* ── Search / Filter ── */
   .toolbar { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; justify-content: space-between; }
@@ -615,6 +639,18 @@ export default function App() {
   const [otpValue, setOtpValue] = useState("");
   const [otpTarget, setOtpTarget] = useState(null); // user being verified
   const [otpCountdown, setOtpCountdown] = useState(0);
+  const [historyStatusFilter, setHistoryStatusFilter] = useState("all");
+  const [historyItemFilter, setHistoryItemFilter] = useState("all");
+  const [historyPersonFilter, setHistoryPersonFilter] = useState("");
+  const [historyFromDate, setHistoryFromDate] = useState("");
+  const [historyToDate, setHistoryToDate] = useState("");
+  const [lowStockThreshold, setLowStockThreshold] = useState(() => Number(localStorage.getItem("low_stock_threshold") || 2));
+  const [lowStockThresholdInput, setLowStockThresholdInput] = useState(() => String(Number(localStorage.getItem("low_stock_threshold") || 2)));
+  const [dueDateByTx, setDueDateByTx] = useState(() => JSON.parse(localStorage.getItem("tx_due_dates") || "{}"));
+  const [damageReports, setDamageReports] = useState(() => JSON.parse(localStorage.getItem("damage_reports") || "{}"));
+  const [reservations, setReservations] = useState(() => JSON.parse(localStorage.getItem("item_reservations") || "[]"));
+  const [otpFailures, setOtpFailures] = useState(0);
+  const [otpLockedUntil, setOtpLockedUntil] = useState(0);
   const [uiMode, setUiMode] = useState(() => {
     if (typeof window === "undefined") return "";
     return window.localStorage.getItem("ui_mode") || "";
@@ -625,10 +661,22 @@ export default function App() {
   const normalizeItem = (item) => ({
     ...item,
     locationDescription: item.locationDescription ?? item.location ?? "",
+    condition: item.condition ?? item.item_condition ?? "Good",
   });
   const normalizeUser = (user) => ({
     ...user,
     passwordHash: user.password_hash ?? user.passwordHash,
+  });
+  const normalizeReservation = (row) => ({
+    id: row.id,
+    itemId: row.item_id ?? row.itemId,
+    itemName: row.item_name ?? row.itemName,
+    quantity: Number(row.quantity || 0),
+    reservedFor: row.reserved_for ?? row.reservedFor,
+    reservedBy: row.reserved_by ?? row.reservedBy,
+    reservedByName: row.reserved_by_name ?? row.reservedByName,
+    status: row.status || "active",
+    createdAt: row.created_at ?? row.createdAt,
   });
 
   useEffect(() => {
@@ -636,6 +684,21 @@ export default function App() {
       window.localStorage.setItem("ui_mode", uiMode);
     }
   }, [uiMode]);
+  useEffect(() => {
+    localStorage.setItem("low_stock_threshold", String(lowStockThreshold));
+  }, [lowStockThreshold]);
+  useEffect(() => {
+    setLowStockThresholdInput(String(lowStockThreshold));
+  }, [lowStockThreshold]);
+  useEffect(() => {
+    localStorage.setItem("tx_due_dates", JSON.stringify(dueDateByTx));
+  }, [dueDateByTx]);
+  useEffect(() => {
+    localStorage.setItem("damage_reports", JSON.stringify(damageReports));
+  }, [damageReports]);
+  useEffect(() => {
+    localStorage.setItem("item_reservations", JSON.stringify(reservations));
+  }, [reservations]);
   useEffect(() => {
     (async () => {
       try {
@@ -712,6 +775,7 @@ export default function App() {
               siteId: i.siteId, zoneId: i.zoneId,
               location: i.locationDescription,
               locationDescription: i.locationDescription,
+              condition: i.condition || "Good",
               image: i.image,
             })));
             setItems(SEED_ITEMS);
@@ -725,18 +789,102 @@ export default function App() {
 
         // KEEP transaction history - do NOT clear it. Load all historical transactions.
         if (tx?.length) {
-          setTransactions(tx.map(t => ({
+          const normalizedTx = tx.map(t => ({
             id: t.id, itemId: t.item_id, itemName: t.item_name,
             quantity: t.quantity, checkedOutBy: t.checked_out_by,
             checkedOutByName: t.checked_out_by_name, checkOutTime: t.check_out_time,
             checkedInBy: t.checked_in_by, checkedInByName: t.checked_in_by_name,
             checkInTime: t.check_in_time, status: t.status,
-          })));
+          }));
+          setTransactions(normalizedTx);
+          const dueMap = {};
+          tx.forEach((t) => {
+            if (t.due_date) dueMap[t.id] = t.due_date;
+          });
+          if (Object.keys(dueMap).length) setDueDateByTx(prev => ({ ...prev, ...dueMap }));
         } else {
           setTransactions([]);
         }
+
+        try {
+          const [{ data: reservationRows }, { data: reportRows }] = await Promise.all([
+            supabase.from('item_reservations').select('*').order('created_at', { ascending: false }),
+            supabase.from('checkin_reports').select('*'),
+          ]);
+
+          if (reservationRows?.length) setReservations(reservationRows.map(normalizeReservation));
+
+          if (reportRows?.length) {
+            const mapped = {};
+            reportRows.forEach((row) => {
+              mapped[row.tx_id] = {
+                condition: row.condition,
+                note: row.note || "",
+                itemName: row.item_name || "",
+                reportedBy: row.reported_by || "",
+                reportedAt: row.reported_at,
+              };
+            });
+            setDamageReports(mapped);
+          }
+
+          localStorage.setItem("offline_reservations_cache", JSON.stringify(reservationRows || []));
+          localStorage.setItem("offline_reports_cache", JSON.stringify(reportRows || []));
+        } catch (opsErr) {
+          console.warn("Failed to load ops feature tables:", opsErr);
+        }
+
+        localStorage.setItem("offline_users_cache", JSON.stringify(u || []));
+        localStorage.setItem("offline_items_cache", JSON.stringify(it || []));
+        localStorage.setItem("offline_tx_cache", JSON.stringify(tx || []));
       } catch (err) {
         console.warn("Failed to load data from Supabase:", err);
+        const offlineUsers = JSON.parse(localStorage.getItem("offline_users_cache") || "[]");
+        const offlineItems = JSON.parse(localStorage.getItem("offline_items_cache") || "[]");
+        const offlineTx = JSON.parse(localStorage.getItem("offline_tx_cache") || "[]");
+        const offlineReservations = JSON.parse(localStorage.getItem("offline_reservations_cache") || "[]");
+        const offlineReports = JSON.parse(localStorage.getItem("offline_reports_cache") || "[]");
+        if (offlineUsers.length || offlineItems.length || offlineTx.length) {
+          setUsers(prev => {
+            const merged = [...prev];
+            offlineUsers.map(normalizeUser).forEach(dbUser => {
+              const idx = merged.findIndex(x => x.email.toLowerCase() === dbUser.email.toLowerCase());
+              if (idx > -1) merged[idx] = { ...merged[idx], ...dbUser };
+              else merged.push(dbUser);
+            });
+            return merged;
+          });
+          setItems(offlineItems.map(normalizeItem));
+          setTransactions(offlineTx.map(t => ({
+            id: t.id, itemId: t.item_id ?? t.itemId, itemName: t.item_name ?? t.itemName,
+            quantity: t.quantity, checkedOutBy: t.checked_out_by ?? t.checkedOutBy,
+            checkedOutByName: t.checked_out_by_name ?? t.checkedOutByName, checkOutTime: t.check_out_time ?? t.checkOutTime,
+            checkedInBy: t.checked_in_by ?? t.checkedInBy, checkedInByName: t.checked_in_by_name ?? t.checkedInByName,
+            checkInTime: t.check_in_time ?? t.checkInTime, status: t.status,
+          })));
+          const dueMap = {};
+          offlineTx.forEach((t) => {
+            if (t.due_date) dueMap[t.id] = t.due_date;
+          });
+          if (Object.keys(dueMap).length) setDueDateByTx(prev => ({ ...prev, ...dueMap }));
+
+          if (offlineReservations.length) setReservations(offlineReservations.map(normalizeReservation));
+          if (offlineReports.length) {
+            const mapped = {};
+            offlineReports.forEach((row) => {
+              const key = row.tx_id || row.txId;
+              mapped[key] = {
+                condition: row.condition,
+                note: row.note || "",
+                itemName: row.item_name || row.itemName || "",
+                reportedBy: row.reported_by || row.reportedBy || "",
+                reportedAt: row.reported_at || row.reportedAt,
+              };
+            });
+            setDamageReports(mapped);
+          }
+          showToast("Offline cache loaded. Some data may be stale.", "error");
+        }
       }
     })();
   }, []);
@@ -800,6 +948,9 @@ export default function App() {
               status: payload.new.status,
             }];
           });
+          if (payload.new.due_date) {
+            setDueDateByTx(prev => ({ ...prev, [payload.new.id]: payload.new.due_date }));
+          }
         } else if (payload.eventType === 'UPDATE') {
           setTransactions(prev => prev.map(t => t.id === payload.new.id ? {
             id: payload.new.id,
@@ -814,6 +965,50 @@ export default function App() {
             checkInTime: payload.new.check_in_time,
             status: payload.new.status,
           } : t));
+          setDueDateByTx(prev => {
+            const next = { ...prev };
+            if (payload.new.due_date) next[payload.new.id] = payload.new.due_date;
+            return next;
+          });
+        }
+      })
+      .subscribe();
+
+    const reservationsSubscription = supabase
+      .channel('reservations-channel')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'item_reservations' }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          const row = normalizeReservation(payload.new);
+          setReservations(prev => prev.some(r => r.id === row.id) ? prev : [row, ...prev]);
+        } else if (payload.eventType === 'UPDATE') {
+          const row = normalizeReservation(payload.new);
+          setReservations(prev => prev.map(r => r.id === row.id ? row : r));
+        } else if (payload.eventType === 'DELETE') {
+          setReservations(prev => prev.filter(r => r.id !== payload.old.id));
+        }
+      })
+      .subscribe();
+
+    const reportsSubscription = supabase
+      .channel('reports-channel')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'checkin_reports' }, (payload) => {
+        if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+          setDamageReports(prev => ({
+            ...prev,
+            [payload.new.tx_id]: {
+              condition: payload.new.condition,
+              note: payload.new.note || "",
+              itemName: payload.new.item_name || "",
+              reportedBy: payload.new.reported_by || "",
+              reportedAt: payload.new.reported_at,
+            },
+          }));
+        } else if (payload.eventType === 'DELETE') {
+          setDamageReports(prev => {
+            const next = { ...prev };
+            delete next[payload.old.tx_id];
+            return next;
+          });
         }
       })
       .subscribe();
@@ -857,11 +1052,17 @@ export default function App() {
       itemsSubscription.unsubscribe();
       txSubscription.unsubscribe();
       usersSubscription.unsubscribe();
+      reservationsSubscription.unsubscribe();
+      reportsSubscription.unsubscribe();
     };
   }, [currentUser]);
 
   // ── Derived ──
-  const overdueCount = transactions.filter(t => t.status === "out" && daysAgo(t.checkOutTime) > 30).length;
+  const overdueCount = transactions.filter(t => {
+    if (t.status !== "out") return false;
+    const due = dueDateByTx[t.id] ? new Date(dueDateByTx[t.id]) : new Date(new Date(t.checkOutTime).getTime() + 30 * 86400000);
+    return due < new Date();
+  }).length;
   const checkedOutCount = transactions.filter(t => t.status === "out").length;
   const pendingUsers = users.filter(u => u.status === "pending");
 
@@ -871,6 +1072,8 @@ export default function App() {
     const expiresAt = new Date(Date.now() + 30 * 1000).toISOString();
     setOtpTarget({ ...user, expectedOtp: otp, otpExpiresAt: expiresAt });
     setOtpValue("");
+    setOtpFailures(0);
+    setOtpLockedUntil(0);
     setAuthStep("otp");
     setOtpCountdown(30);
     showToast("OTP generated and shown on screen for 30 seconds.", "success");
@@ -918,12 +1121,30 @@ export default function App() {
   };
 
   const handleOTPVerify = async () => {
+    if (Date.now() < otpLockedUntil) {
+      const wait = Math.ceil((otpLockedUntil - Date.now()) / 1000);
+      showToast(`Too many failed attempts. Try again in ${wait}s.`, "error");
+      return;
+    }
     const inputOtp = otpValue.trim();
     if (!inputOtp) { showToast("Please enter OTP.", "error"); return; }
 
     const expected = otpTarget?.expectedOtp;
     if (!expected) { showToast("OTP expired. Generate a new code.", "error"); return; }
-    if (inputOtp !== expected) { showToast("Invalid OTP. Please try again.", "error"); return; }
+    if (inputOtp !== expected) {
+      const nextFailures = otpFailures + 1;
+      setOtpFailures(nextFailures);
+      if (nextFailures >= 5) {
+        setOtpLockedUntil(Date.now() + 5 * 60 * 1000);
+        showToast("Too many failed OTP attempts. Locked for 5 minutes.", "error");
+      } else {
+        showToast(`Invalid OTP. ${5 - nextFailures} attempts remaining.`, "error");
+      }
+      return;
+    }
+
+    setOtpFailures(0);
+    setOtpLockedUntil(0);
 
     const u = users.find(x => x.id === otpTarget.id) || otpTarget;
     if (u.status === "pending") {
@@ -1008,6 +1229,7 @@ const handleAddItem = async (data) => {
     name: newItem.name,
     quantity: newItem.quantity,
     category: newItem.category,
+    condition: newItem.condition || "Good",
     image: newItem.image,
   };
   
@@ -1040,6 +1262,7 @@ const handleEditItem = async (data) => {
     name: data.name,
     quantity: data.quantity,
     category: data.category,
+    condition: data.condition || "Good",
     image: data.image,
   };
   
@@ -1052,14 +1275,66 @@ const handleEditItem = async (data) => {
   }
   
   try {
-    const { data: updated, error } = await supabase.from('items').update(updateData).eq('id', data.id).select().single();
-    if (!error && updated) {
-      setItems(prev => prev.map(it => it.id === data.id ? normalizeItem(updated) : it));
-      showToast("Item updated!", "success");
-    } else {
-      console.error("Update error:", error);
-      showToast("Failed to update item: " + error.message, "error");
+    const payloads = [
+      updateData,
+      (() => {
+        const p = { ...updateData };
+        delete p.locationDescription;
+        return p;
+      })(),
+      (() => {
+        const p = { ...updateData };
+        delete p.locationDescription;
+        delete p.siteId;
+        delete p.zoneId;
+        return p;
+      })(),
+      {
+        name: data.name,
+        quantity: data.quantity,
+        category: data.category,
+        condition: data.condition || "Good",
+        image: data.image,
+      },
+      {
+        name: data.name,
+        quantity: data.quantity,
+        category: data.category,
+        image: data.image,
+      },
+    ];
+
+    let updated = null;
+    let lastError = null;
+
+    for (const payload of payloads) {
+      const { data: row, error } = await supabase
+        .from('items')
+        .update(payload)
+        .eq('id', data.id)
+        .select('*')
+        .maybeSingle();
+
+      if (!error) {
+        updated = row;
+        lastError = null;
+        break;
+      }
+      lastError = error;
     }
+
+    if (lastError) {
+      console.error("Update error:", lastError);
+      showToast("Failed to update item: " + lastError.message, "error");
+      return;
+    }
+
+    setItems(prev => prev.map(it => {
+      if (it.id !== data.id) return it;
+      const base = updated ? normalizeItem(updated) : { ...it, ...data };
+      return { ...base, condition: data.condition || base.condition || "Good" };
+    }));
+    showToast("Item updated!", "success");
   } catch (err) {
     console.error("Update exception:", err);
     showToast("Failed to update item.", "error");
@@ -1087,6 +1362,7 @@ const handleRestoreItems = async () => {
         siteId: i.siteId, zoneId: i.zoneId,
         location: i.locationDescription,
         locationDescription: i.locationDescription,
+        condition: i.condition || "Good",
         image: i.image,
       })));
       if (insertError) throw insertError;
@@ -1136,24 +1412,48 @@ const handleRestoreItems = async () => {
 };
 
   // ── Transactions ──
-const handleCheckOut = async (itemId, quantity) => {
+const handleCheckOut = async (itemId, quantity, dueDateIso) => {
   const item = items.find(i => i.id === itemId);
+  if (!item) {
+    showToast("Item not found.", "error");
+    return;
+  }
+  const requestedQty = Math.max(1, Number(quantity) || 1);
+  const todayStart = new Date(new Date().toDateString());
+  const totalOut = transactions
+    .filter(t => t.itemId === itemId && t.status === "out")
+    .reduce((s, t) => s + Number(t.quantity || 0), 0);
+  const alreadyReserved = reservations
+    .filter(r => r.itemId === itemId && r.status === "active" && new Date(r.reservedFor) >= todayStart)
+    .reduce((s, r) => s + Number(r.quantity || 0), 0);
+  const available = Math.max(0, Number(item.quantity || 0) - totalOut - alreadyReserved);
+  if (requestedQty > available) {
+    showToast(`Cannot check out ${requestedQty}. Only ${available} available after reservations.`, "error");
+    return;
+  }
+  const dueDate = dueDateIso || new Date(Date.now() + 30 * 86400000).toISOString();
   const tx = {
-    id: uid(), item_id: itemId, item_name: item.name, quantity,
+    id: uid(), item_id: itemId, item_name: item.name, quantity: requestedQty,
     checked_out_by: currentUser.id, checked_out_by_name: currentUser.name,
     check_out_time: new Date().toISOString(),
     checked_in_by: null, check_in_time: null, status: "out",
+    due_date: dueDate,
   };
-  await supabase.from('transactions').insert(tx);
+  const { error } = await supabase.from('transactions').insert(tx);
+  if (error) {
+    showToast("Unable to check out item.", "error");
+    return;
+  }
   setTransactions(prev => [...prev, {
-    id: tx.id, itemId, itemName: item.name, quantity,
+    id: tx.id, itemId, itemName: item.name, quantity: requestedQty,
     checkedOutBy: currentUser.id, checkedOutByName: currentUser.name,
     checkOutTime: tx.check_out_time, status: "out",
   }]);
+  setDueDateByTx(prev => ({ ...prev, [tx.id]: dueDate }));
   showToast(`${item.name} checked out!`, "success");
   setModal(null);
 };
-const handleCheckIn = async (txId) => {
+const handleCheckIn = async (txId, report = { condition: "good", note: "" }) => {
   const tx = transactions.find(t => t.id === txId);
   if (!tx) {
     showToast("Unable to check in item.", "error");
@@ -1167,15 +1467,113 @@ const handleCheckIn = async (txId) => {
   }
 
   const now = new Date().toISOString();
-  await supabase.from('transactions').update({
+  const { error } = await supabase.from('transactions').update({
     status: "in", checked_in_by: currentUser.id,
     checked_in_by_name: currentUser.name, check_in_time: now,
   }).eq('id', txId);
+  if (error) {
+    showToast("Unable to check in item.", "error");
+    return;
+  }
   setTransactions(prev => prev.map(t =>
     t.id === txId ? { ...t, status: "in", checkedInBy: currentUser.id, checkedInByName: currentUser.name, checkInTime: now } : t
   ));
+  if (report?.condition && report.condition !== "good") {
+    await supabase.from('checkin_reports').upsert({
+      tx_id: txId,
+      item_name: tx.itemName,
+      condition: report.condition,
+      note: report.note || "",
+      reported_by: currentUser.name,
+      reported_at: now,
+    });
+    setDamageReports(prev => ({
+      ...prev,
+      [txId]: {
+        condition: report.condition,
+        note: report.note || "",
+        itemName: tx.itemName,
+        reportedBy: currentUser.name,
+        reportedAt: now,
+      },
+    }));
+  } else {
+    await supabase.from('checkin_reports').delete().eq('tx_id', txId);
+  }
   showToast("Item checked in!", "success");
   setModal(null);
+};
+
+const handleReserveItem = async (itemId, quantity, reservedFor) => {
+  const item = items.find(i => i.id === itemId);
+  if (!item) return;
+  const requestedQty = Math.max(1, Number(quantity) || 1);
+  const todayStart = new Date(new Date().toDateString());
+  const totalOut = transactions
+    .filter(t => t.itemId === itemId && t.status === "out")
+    .reduce((s, t) => s + Number(t.quantity || 0), 0);
+  const alreadyReserved = reservations
+    .filter(r => r.itemId === itemId && r.status === "active" && new Date(r.reservedFor) >= todayStart)
+    .reduce((s, r) => s + Number(r.quantity || 0), 0);
+  const available = Math.max(0, Number(item.quantity || 0) - totalOut - alreadyReserved);
+  if (requestedQty > available) {
+    showToast(`Cannot reserve ${requestedQty}. Only ${available} available.`, "error");
+    return;
+  }
+
+  const normalizedDate = reservedFor || new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+  const reservation = normalizeReservation({
+    id: uid(),
+    item_id: itemId,
+    item_name: item.name,
+    quantity: requestedQty,
+    reserved_for: normalizedDate,
+    reserved_by: currentUser.id,
+    reserved_by_name: currentUser.name,
+    status: "active",
+    created_at: new Date().toISOString(),
+  });
+  const { error: reserveError } = await supabase.from('item_reservations').insert({
+    id: reservation.id,
+    item_id: reservation.itemId,
+    item_name: reservation.itemName,
+    quantity: reservation.quantity,
+    reserved_for: reservation.reservedFor,
+    reserved_by: reservation.reservedBy,
+    reserved_by_name: reservation.reservedByName,
+    status: reservation.status,
+    created_at: reservation.createdAt,
+  });
+  if (reserveError) {
+    showToast("Unable to save reservation.", "error");
+    return;
+  }
+  setReservations(prev => [reservation, ...prev].slice(0, 500));
+  showToast(`${item.name} reserved for ${normalizedDate}.`, "success");
+  setModal(null);
+};
+
+const handleCancelReservation = async (reservationId) => {
+  const row = reservations.find(r => r.id === reservationId);
+  if (!row) return;
+  const canCancel = currentUser?.role === "admin" || row.reservedBy === currentUser?.id;
+  if (!canCancel) {
+    showToast("You can only cancel your own reservations.", "error");
+    return;
+  }
+
+  const { error } = await supabase
+    .from('item_reservations')
+    .update({ status: 'cancelled' })
+    .eq('id', reservationId);
+
+  if (error) {
+    showToast("Unable to cancel reservation.", "error");
+    return;
+  }
+
+  setReservations(prev => prev.map(r => r.id === reservationId ? { ...r, status: 'cancelled' } : r));
+  showToast("Reservation cancelled.", "success");
 };
 
   // ── Views ──
@@ -1367,6 +1765,62 @@ const handleCheckIn = async (txId) => {
   const myOpenTransactions = transactions.filter(t => t.status === "out" && t.checkedOutBy === currentUser.id);
   const allOpenTransactions = transactions.filter(t => t.status === "out");
   const filteredTransactions = currentUser.role === "admin" ? transactions : transactions.filter(t => t.checkedOutBy === currentUser.id);
+  const activeReservations = reservations.filter(r => r.status === "active" && new Date(r.reservedFor) >= new Date(new Date().toDateString()));
+  const reservedQtyByItem = activeReservations.reduce((acc, r) => {
+    acc[r.itemId] = (acc[r.itemId] || 0) + Number(r.quantity || 0);
+    return acc;
+  }, {});
+
+  const lowStockItems = items
+    .map((item) => {
+      const totalOut = transactions.filter(t => t.itemId === item.id && t.status === "out").reduce((s, t) => s + t.quantity, 0);
+      const available = item.quantity - totalOut;
+      return { item, available };
+    })
+    .filter(({ available }) => available > -1 && available <= lowStockThreshold)
+    .sort((a, b) => a.available - b.available)
+    .slice(0, 8);
+
+  const historyItemOptions = Array.from(new Set(filteredTransactions.map(t => t.itemName))).sort();
+  const historyVisibleTransactions = filteredTransactions.filter((t) => {
+    if (historyStatusFilter !== "all" && t.status !== historyStatusFilter) return false;
+    if (historyItemFilter !== "all" && t.itemName !== historyItemFilter) return false;
+
+    const person = `${t.checkedOutByName || ""} ${t.checkedInByName || ""}`.toLowerCase();
+    if (historyPersonFilter && !person.includes(historyPersonFilter.trim().toLowerCase())) return false;
+
+    const relevantDate = new Date(t.status === "out" ? t.checkOutTime : (t.checkInTime || t.checkOutTime));
+    if (historyFromDate && relevantDate < new Date(`${historyFromDate}T00:00:00`)) return false;
+    if (historyToDate && relevantDate > new Date(`${historyToDate}T23:59:59`)) return false;
+
+    return true;
+  });
+
+  const exportHistoryCsv = () => {
+    const header = ["Item", "Qty", "Checked Out By", "Check Out", "Due Date", "Checked In By", "Check In", "Condition", "Status"];
+    const rows = historyVisibleTransactions.map((t) => [
+      t.itemName,
+      t.quantity,
+      t.checkedOutByName || "",
+      fmtDate(t.checkOutTime),
+      dueDateByTx[t.id] ? fmtDate(dueDateByTx[t.id]) : "",
+      t.checkedInByName || "",
+      fmtDate(t.checkInTime),
+      damageReports[t.id]?.condition || "",
+      t.status === "out" ? "Out" : "Returned",
+    ]);
+    const escapeCell = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const csv = [header, ...rows].map((row) => row.map(escapeCell).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `transaction-history-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <>
@@ -1488,6 +1942,43 @@ const handleCheckIn = async (txId) => {
                   </div>
                 )}
 
+                {lowStockItems.length > 0 && (
+                  <div className="card low-stock-card">
+                    <div className="card-header">
+                      <h3>Low Stock Alerts</h3>
+                      <div className="field" style={{ marginBottom: 0, width: 132 }}>
+                        <label style={{ marginBottom: 4 }}>Threshold</label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9]*"
+                          value={lowStockThresholdInput}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/\D/g, "").trim();
+                            setLowStockThresholdInput(raw);
+                          }}
+                          onBlur={() => {
+                            const parsed = Number(lowStockThresholdInput || "1");
+                            const clamped = Math.max(1, Math.min(20, Number.isNaN(parsed) ? 1 : parsed));
+                            setLowStockThreshold(clamped);
+                            setLowStockThresholdInput(String(clamped));
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div className="card-body" style={{ padding: 16 }}>
+                      <div className="low-stock-list">
+                        {lowStockItems.map(({ item, available }) => (
+                          <div key={item.id} className="low-stock-item">
+                            <strong>{item.name}</strong>
+                            <p>{available} available of {item.quantity} total</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="card">
                   <div className="card-header"><h3>Recent Activity</h3></div>
                   <div className="card-body">
@@ -1565,7 +2056,8 @@ const handleCheckIn = async (txId) => {
                   {filteredItems.map(item => {
                     const outTxs = transactions.filter(t => t.itemId === item.id && t.status === "out");
                     const totalOut = outTxs.reduce((s, t) => s + t.quantity, 0);
-                    const available = item.quantity - totalOut;
+                    const reserved = reservedQtyByItem[item.id] || 0;
+                    const available = Math.max(0, item.quantity - totalOut - reserved);
                     const zone = item.siteId && item.zoneId ? SITES.find(s => s.id === item.siteId)?.zones.find(z => z.id === item.zoneId) : null;
                     return (
                       <div key={item.id} className="item-card">
@@ -1582,6 +2074,7 @@ const handleCheckIn = async (txId) => {
                         <div className="item-card-name">{item.name}</div>
                         <div className="item-card-meta">
                           <span className="badge badge-cat">{item.category}</span>
+                          <span className="tag">Condition: {item.condition || "Good"}</span>
                         </div>
                         <div style={{ fontSize: 13, color: "var(--text)", marginBottom: 14, lineHeight: 1.4, fontWeight: 500 }}>
                           <div><strong>📍 {zone?.name || 'Location not set'}</strong></div>
@@ -1596,12 +2089,17 @@ const handleCheckIn = async (txId) => {
                             <div className="item-card-qty" style={{ color: "var(--text-muted)", fontSize: 20 }}>{item.quantity}</div>
                             <div className="item-card-qty-label">Total</div>
                           </div>
+                          <div>
+                            <div className="item-card-qty" style={{ color: "#B56A1D", fontSize: 20 }}>{reserved}</div>
+                            <div className="item-card-qty-label">Reserved</div>
+                          </div>
                         </div>
                         <div className="item-card-actions">
                           <button className="btn btn-sm btn-primary" disabled={available < 1}
                             onClick={() => setModal({ type: "checkout", item })}>
                             {available < 1 ? "Unavailable" : "Check Out"}
                           </button>
+                          <button className="btn btn-sm btn-secondary" onClick={() => setModal({ type: "reserve", item })}>Reserve</button>
                           {currentUser.role === "admin" && (
                             <button className="btn btn-sm btn-ghost"
                               onClick={() => setModal({ type: "edit-item", item })}>
@@ -1619,6 +2117,37 @@ const handleCheckIn = async (txId) => {
                       <p>Try adjusting your search or filter.</p>
                     </div>
                   )}
+                </div>
+
+                <div className="card reservations-panel">
+                  <div className="card-header">
+                    <h3>Active Reservations</h3>
+                    <span className="tag">{activeReservations.length} total</span>
+                  </div>
+                  <div className="card-body" style={{ padding: 16 }}>
+                    {activeReservations.length === 0 ? (
+                      <div style={{ color: "var(--text-muted)", fontSize: 13 }}>No active reservations right now.</div>
+                    ) : (
+                      <div className="reservations-grid">
+                        {activeReservations
+                          .slice(0, 24)
+                          .map((r) => {
+                            const canCancel = currentUser.role === "admin" || r.reservedBy === currentUser.id;
+                            return (
+                              <div key={r.id} className="reservation-card">
+                                <h4>{r.itemName || "Reserved Item"}</h4>
+                                <div className="reservation-meta">Qty: {r.quantity}</div>
+                                <div className="reservation-meta">For: {r.reservedFor}</div>
+                                <div className="reservation-meta">By: {r.reservedByName || "Unknown"}</div>
+                                <div className="reservation-actions">
+                                  <button className="btn btn-sm btn-ghost" onClick={() => handleCancelReservation(r.id)} disabled={!canCancel}>Cancel Reservation</button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </>
@@ -1668,7 +2197,8 @@ const handleCheckIn = async (txId) => {
                 <div className="items-grid">
                   {filteredItems.map(item => {
                     const totalOut = transactions.filter(t => t.itemId === item.id && t.status === "out").reduce((s, t) => s + t.quantity, 0);
-                    const available = item.quantity - totalOut;
+                    const reserved = reservedQtyByItem[item.id] || 0;
+                    const available = Math.max(0, item.quantity - totalOut - reserved);
                     const zone = SITES.find(s => s.id === item.siteId)?.zones.find(z => z.id === item.zoneId);
                     return (
                       <div key={item.id} className={`item-card ${available < 1 ? "disabled" : ""}`} style={available < 1 ? { opacity: 0.5 } : {}}>
@@ -1685,6 +2215,7 @@ const handleCheckIn = async (txId) => {
                         <div className="item-card-name">{item.name}</div>
                         <div className="item-card-meta">
                           <span className="badge badge-cat">{item.category}</span>
+                          <span className="tag">Condition: {item.condition || "Good"}</span>
                         </div>
                         <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14, lineHeight: 1.4 }}>
                           <div><strong>📍 {zone?.name}</strong></div>
@@ -1692,13 +2223,14 @@ const handleCheckIn = async (txId) => {
                         </div>
                         <div>
                           <div className="item-card-qty">{available}</div>
-                          <div className="item-card-qty-label">Available of {item.quantity}</div>
+                          <div className="item-card-qty-label">Available of {item.quantity} ({reserved} reserved)</div>
                         </div>
                         <div className="item-card-actions">
                           <button className="btn btn-sm btn-primary" disabled={available < 1}
                             onClick={() => setModal({ type: "checkout", item })}>
                             {available < 1 ? "Unavailable" : "Check Out →"}
                           </button>
+                          <button className="btn btn-sm btn-secondary" onClick={() => setModal({ type: "reserve", item })}>Reserve</button>
                         </div>
                       </div>
                     );
@@ -1776,32 +2308,64 @@ const handleCheckIn = async (txId) => {
               <div className="page-header">
                 <div className="page-header-left">
                   <h2>Transaction History</h2>
-                  <p>{filteredTransactions.length} total records</p>
+                  <p>{historyVisibleTransactions.length} of {filteredTransactions.length} records</p>
                 </div>
+                <button className="btn btn-secondary" onClick={exportHistoryCsv}>Export CSV</button>
               </div>
               <div className="page-body">
+                <div className="toolbar section-gap history-filters">
+                  <select className="filter-select" value={historyStatusFilter} onChange={e => setHistoryStatusFilter(e.target.value)}>
+                    <option value="all">All Statuses</option>
+                    <option value="out">Checked Out</option>
+                    <option value="in">Checked In</option>
+                  </select>
+                  <select className="filter-select" value={historyItemFilter} onChange={e => setHistoryItemFilter(e.target.value)}>
+                    <option value="all">All Items</option>
+                    {historyItemOptions.map(name => <option key={name} value={name}>{name}</option>)}
+                  </select>
+                  <input className="filter-select" type="text" placeholder="Filter by person" value={historyPersonFilter} onChange={e => setHistoryPersonFilter(e.target.value)} />
+                  <input className="filter-select" type="date" value={historyFromDate} onChange={e => setHistoryFromDate(e.target.value)} />
+                  <input className="filter-select" type="date" value={historyToDate} onChange={e => setHistoryToDate(e.target.value)} />
+                  <button className="btn btn-ghost" onClick={() => {
+                    setHistoryStatusFilter("all");
+                    setHistoryItemFilter("all");
+                    setHistoryPersonFilter("");
+                    setHistoryFromDate("");
+                    setHistoryToDate("");
+                  }}>Clear</button>
+                </div>
                 <div className="card">
                   <div className="card-body">
                     <table className="tbl">
                       <thead>
-                        <tr><th>Item</th><th>Qty</th><th>Checked Out By</th><th>Check Out</th><th>Checked In By</th><th>Check In</th><th>Status</th></tr>
+                        <tr><th>Item</th><th>Qty</th><th>Checked Out By</th><th>Check Out</th><th>Due Date</th><th>Checked In By</th><th>Check In</th><th>Condition</th><th>Status</th></tr>
                       </thead>
                       <tbody>
-                        {[...filteredTransactions].reverse().map(t => (
+                        {[...historyVisibleTransactions].reverse().map(t => (
                           <tr key={t.id}>
                             <td><strong>{t.itemName}</strong></td>
                             <td>{t.quantity}</td>
                             <td>{t.checkedOutByName}</td>
                             <td style={{ fontSize: 13, color: "var(--text-muted)" }}>{fmtDate(t.checkOutTime)}</td>
+                            <td style={{ fontSize: 13, color: "var(--text-muted)" }}>{dueDateByTx[t.id] ? fmtDate(dueDateByTx[t.id]) : "—"}</td>
                             <td>{t.checkedInByName || "—"}</td>
                             <td style={{ fontSize: 13, color: "var(--text-muted)" }}>{fmtDate(t.checkInTime)}</td>
+                            <td>{damageReports[t.id]?.condition ? <span className="tag">{damageReports[t.id].condition}</span> : "—"}</td>
                             <td><span className={`badge badge-${t.status}`}>{t.status === "out" ? "Out" : "Returned"}</span></td>
                           </tr>
                         ))}
+                        {historyVisibleTransactions.length === 0 && (
+                          <tr>
+                            <td colSpan={9} style={{ textAlign: "center", color: "var(--text-muted)" }}>
+                              No transactions match the current filters.
+                            </td>
+                          </tr>
+                        )}
                       </tbody>
                     </table>
                   </div>
                 </div>
+                <div className="history-count-note">Tip: Use filters to narrow results and export only what you need.</div>
               </div>
             </>
           )}
@@ -1879,22 +2443,29 @@ const handleCheckIn = async (txId) => {
               <div className="page-header">
                 <div className="page-header-left">
                   <h2>Overdue Reminders</h2>
-                  <p>Items checked out for more than 30 days</p>
+                  <p>Due soon and overdue checkouts</p>
                 </div>
               </div>
               <div className="page-body">
                 {(() => {
-                  const overdue = transactions.filter(t => t.status === "out" && daysAgo(t.checkOutTime) > 30);
-                  return overdue.length === 0 ? (
+                  const openTransactions = transactions.filter(t => t.status === "out");
+                  const withDue = openTransactions.map(t => {
+                    const due = dueDateByTx[t.id] ? new Date(dueDateByTx[t.id]) : new Date(new Date(t.checkOutTime).getTime() + 30 * 86400000);
+                    const daysLeft = Math.ceil((due - new Date()) / 86400000);
+                    return { ...t, dueDate: due.toISOString(), daysLeft };
+                  });
+                  const overdue = withDue.filter(t => t.daysLeft < 0);
+                  const dueSoon = withDue.filter(t => t.daysLeft >= 0 && t.daysLeft <= 3);
+                  return withDue.length === 0 ? (
                     <div className="empty-state">
                       <div className="empty-icon">🎉</div>
-                      <h3>No overdue items!</h3>
-                      <p>All checked-out items are within the 30-day window.</p>
+                      <h3>No open reminders!</h3>
+                      <p>All checked-out items are resolved.</p>
                     </div>
                   ) : (
                     <div className="card">
                       <div className="card-header">
-                        <h3>⚠️ Overdue Checkouts ({overdue.length})</h3>
+                        <h3>⚠️ Overdue ({overdue.length}) · ⏳ Due Soon ({dueSoon.length})</h3>
                         <button className="btn btn-sm btn-primary"
                           onClick={() => showToast(`Reminder emails sent to ${[...new Set(overdue.map(t => t.checkedOutByName))].join(", ")}!`, "success")}>
                           📧 Send All Reminders
@@ -1902,22 +2473,23 @@ const handleCheckIn = async (txId) => {
                       </div>
                       <div className="card-body">
                         <table className="tbl">
-                          <thead><tr><th>Item</th><th>Qty</th><th>Checked Out By</th><th>Email</th><th>Days Overdue</th><th></th></tr></thead>
+                          <thead><tr><th>Item</th><th>Qty</th><th>Checked Out By</th><th>Email</th><th>Due Date</th><th>Status</th><th></th></tr></thead>
                           <tbody>
-                            {overdue.map(t => {
+                            {withDue.map(t => {
                               const u = users.find(x => x.id === t.checkedOutBy);
+                              const email = u?.email || "";
+                              const remindSubject = encodeURIComponent(`Reminder: Return ${t.itemName}`);
+                              const remindBody = encodeURIComponent(`Hello ${t.checkedOutByName},\n\nThis is a reminder to return ${t.itemName}.\nDue date: ${fmtDate(t.dueDate)}\n\nThank you.`);
                               return (
-                                <tr key={t.id} className="overdue-row">
+                                <tr key={t.id} className={t.daysLeft < 0 ? "overdue-row" : ""}>
                                   <td><strong>{t.itemName}</strong></td>
                                   <td>{t.quantity}</td>
                                   <td>{t.checkedOutByName}</td>
-                                  <td style={{ fontSize: 13, color: "var(--text-muted)" }}>{u?.email || "—"}</td>
-                                  <td><span className="badge badge-overdue">{daysAgo(t.checkOutTime)} days</span></td>
+                                  <td style={{ fontSize: 13, color: "var(--text-muted)" }}>{email || "—"}</td>
+                                  <td>{fmtDate(t.dueDate)}</td>
+                                  <td>{t.daysLeft < 0 ? <span className="badge badge-overdue">Overdue by {Math.abs(t.daysLeft)}d</span> : <span className="badge badge-pending">Due in {t.daysLeft}d</span>}</td>
                                   <td>
-                                    <button className="btn btn-sm btn-ghost"
-                                      onClick={() => showToast(`Reminder sent to ${t.checkedOutByName}!`, "success")}>
-                                      📧 Remind
-                                    </button>
+                                    {email ? <a className="btn btn-sm btn-ghost" href={`mailto:${email}?subject=${remindSubject}&body=${remindBody}`}>📧 Remind</a> : <span style={{ color: "var(--text-muted)", fontSize: 12 }}>No email</span>}
                                   </td>
                                 </tr>
                               );
@@ -1937,7 +2509,20 @@ const handleCheckIn = async (txId) => {
       {/* ── Modals ── */}
       {modal === "add-item" && <AddItemModal onClose={() => setModal(null)} onSave={handleAddItem} />}
       {modal?.type === "edit-item" && <EditItemModal item={modal.item} onClose={() => setModal(null)} onSave={handleEditItem} onDelete={handleDeleteItem} />}
-      {modal?.type === "checkout" && <CheckOutModal item={modal.item} transactions={transactions} user={currentUser} onClose={() => setModal(null)} onConfirm={handleCheckOut} />}
+      {modal?.type === "checkout" && <CheckOutModal item={modal.item} transactions={transactions} user={currentUser} onClose={() => setModal(null)} onConfirm={handleCheckOut} onReserve={handleReserveItem} reservedQty={reservedQtyByItem[modal.item.id] || 0} />}
+      {modal?.type === "reserve" && (
+        <ReserveItemModal
+          item={modal.item}
+          onClose={() => setModal(null)}
+          onReserve={handleReserveItem}
+          maxQty={Math.max(
+            0,
+            Number(modal.item?.quantity || 0) -
+              transactions.filter(t => t.itemId === modal.item?.id && t.status === "out").reduce((s, t) => s + Number(t.quantity || 0), 0) -
+              (reservedQtyByItem[modal.item?.id] || 0)
+          )}
+        />
+      )}
       {modal?.type === "checkin" && <CheckInModal tx={modal.tx} onClose={() => setModal(null)} onConfirm={handleCheckIn} />}
       {modal?.type === "confirm-delete-user" && (
         <ConfirmDeleteUserModal
@@ -2053,7 +2638,7 @@ function ConfirmDeleteUserModal({ user, onClose, onConfirm }) {
 
 // ── Add Item Modal ────────────────────────────────────────────────────────────
 function AddItemModal({ onClose, onSave }) {
-  const [form, setForm] = useState({ name: "", quantity: 1, category: "Ghosh", siteId: SITES[0].id, zoneId: SITES[0].zones[0].id, locationDescription: "", image: "📦" });
+  const [form, setForm] = useState({ name: "", quantity: 1, category: "Ghosh", condition: "Good", siteId: SITES[0].id, zoneId: SITES[0].zones[0].id, locationDescription: "", image: "📦" });
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showZoom, setShowZoom] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -2064,7 +2649,7 @@ function AddItemModal({ onClose, onSave }) {
     reader.onload = () => set("image", reader.result || form.image);
     reader.readAsDataURL(file);
   };
-  
+
   return (
     <Modal title="Add Inventory Item" onClose={onClose}
       footer={<><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={() => { if (form.name && form.locationDescription && form.image) onSave({ ...form, quantity: +form.quantity }); }} disabled={!form.name || !form.locationDescription || !form.image}>Add Item</button></>}>
@@ -2119,6 +2704,11 @@ function AddItemModal({ onClose, onSave }) {
           </select>
         </div>
       </div>
+      <div className="field"><label>Condition</label>
+        <select value={form.condition} onChange={e => set("condition", e.target.value)}>
+          {ITEM_CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
       <div className="row-2">
         <div className="field"><label>Vibhag/Site</label>
           <select value={form.siteId} onChange={e => {
@@ -2148,6 +2738,7 @@ function AddItemModal({ onClose, onSave }) {
 function EditItemModal({ item, onClose, onSave, onDelete }) {
   const [form, setForm] = useState({ 
     ...item, 
+    condition: item.condition || "Good",
     siteId: item.siteId || SITES[0].id,
     zoneId: item.zoneId || SITES[0].zones[0]?.id || "",
     locationDescription: item.locationDescription || ""
@@ -2162,7 +2753,7 @@ function EditItemModal({ item, onClose, onSave, onDelete }) {
     reader.onload = () => set("image", reader.result || form.image);
     reader.readAsDataURL(file);
   };
-  
+
   return (
     <Modal title="Edit Item" onClose={onClose}
       footer={<><button className="btn btn-danger btn-sm" onClick={() => onDelete(item.id)}>Delete</button><div style={{ flex: 1 }} /><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={() => onSave({ ...form, quantity: +form.quantity })}>Save Changes</button></>}>
@@ -2217,6 +2808,11 @@ function EditItemModal({ item, onClose, onSave, onDelete }) {
           </select>
         </div>
       </div>
+      <div className="field"><label>Condition</label>
+        <select value={form.condition} onChange={e => set("condition", e.target.value)}>
+          {ITEM_CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+      </div>
       <div className="row-2">
         <div className="field"><label>Vibhag/Site</label>
           <select value={form.siteId} onChange={e => {
@@ -2243,10 +2839,12 @@ function EditItemModal({ item, onClose, onSave, onDelete }) {
 }
 
 // ── Check Out Modal ───────────────────────────────────────────────────────────
-function CheckOutModal({ item, transactions, user, onClose, onConfirm }) {
+function CheckOutModal({ item, transactions, user, onClose, onConfirm, onReserve, reservedQty = 0 }) {
   const totalOut = transactions.filter(t => t.itemId === item.id && t.status === "out").reduce((s, t) => s + t.quantity, 0);
-  const available = item.quantity - totalOut;
+  const available = Math.max(0, item.quantity - totalOut - reservedQty);
   const [qtyInput, setQtyInput] = useState("1");
+  const [dueDays, setDueDays] = useState("30");
+  const [reserveDate, setReserveDate] = useState("");
   const zone = SITES.find(s => s.id === item.siteId)?.zones.find(z => z.id === item.zoneId);
   const parsedQty = Number.parseInt(qtyInput, 10);
   const safeQty = Number.isNaN(parsedQty) ? 0 : parsedQty;
@@ -2259,13 +2857,14 @@ function CheckOutModal({ item, transactions, user, onClose, onConfirm }) {
   
   return (
     <Modal title={`Check Out: ${item.name}`} onClose={onClose}
-      footer={<><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={() => { if (!invalidQty) onConfirm(item.id, safeQty); }} disabled={invalidQty}>Confirm Check Out</button></>}>
+      footer={<><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-secondary" onClick={() => { const fallbackReserve = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10); onReserve(item.id, safeQty || 1, reserveDate || fallbackReserve); }} disabled={invalidQty || available < 1}>Reserve Instead</button><button className="btn btn-primary" onClick={() => { if (!invalidQty) { const dueDateIso = new Date(Date.now() + Math.max(1, Number(dueDays) || 30) * 86400000).toISOString(); onConfirm(item.id, safeQty, dueDateIso); } }} disabled={invalidQty}>Confirm Check Out</button></>}>
       <div className="info-box">
         <strong>{user.name}</strong> will be checking out this item on {new Date().toLocaleString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}.
       </div>
       <div style={{ display: "flex", gap: 20, marginBottom: 20 }}>
         <div><div style={{ fontSize: 28, fontFamily: "Playfair Display", color: "var(--saffron)" }}>{available}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>Available</div></div>
         <div><div style={{ fontSize: 28, fontFamily: "Playfair Display", color: "var(--text-muted)" }}>{item.quantity}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>Total Stock</div></div>
+        <div><div style={{ fontSize: 28, fontFamily: "Playfair Display", color: "#B56A1D" }}>{reservedQty}</div><div style={{ fontSize: 12, color: "var(--text-muted)" }}>Reserved</div></div>
       </div>
       <div className="field"><label>Quantity to Check Out</label>
         <input
@@ -2278,6 +2877,10 @@ function CheckOutModal({ item, transactions, user, onClose, onConfirm }) {
         />
       </div>
       <div className="row-2">
+        <div className="field"><label>Due in (days)</label><input type="number" min={1} max={180} value={dueDays} onChange={e => setDueDays(e.target.value)} /></div>
+        <div className="field"><label>Reserve Date (optional)</label><input type="date" value={reserveDate} onChange={e => setReserveDate(e.target.value)} /></div>
+      </div>
+      <div className="row-2">
         <div className="field"><label>Zone</label><input value={zone?.name || ""} disabled /></div>
         <div className="field"><label>Exact Location</label><input value={item.locationDescription} disabled /></div>
       </div>
@@ -2288,9 +2891,11 @@ function CheckOutModal({ item, transactions, user, onClose, onConfirm }) {
 // ── Check In Modal ────────────────────────────────────────────────────────────
 function CheckInModal({ tx, onClose, onConfirm }) {
   const days = daysAgo(tx.checkOutTime);
+  const [condition, setCondition] = useState("good");
+  const [note, setNote] = useState("");
   return (
     <Modal title={`Check In: ${tx.itemName}`} onClose={onClose}
-      footer={<><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-forest" onClick={() => onConfirm(tx.id)}>Confirm Check In</button></>}>
+      footer={<><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-forest" onClick={() => onConfirm(tx.id, { condition, note })}>Confirm Check In</button></>}>
       {days > 30 && <div className="info-box" style={{ background: "#FDECEA", borderColor: "#F0B0A8", color: "#8B1A1A" }}>⚠️ This item is <strong>{days} days</strong> overdue. Thank you for returning it!</div>}
       <table className="tbl" style={{ marginBottom: 0 }}>
         <tbody>
@@ -2301,6 +2906,36 @@ function CheckInModal({ tx, onClose, onConfirm }) {
           <tr><td style={{ color: "var(--text-muted)" }}>Duration</td><td><span className={`badge badge-${days > 30 ? "overdue" : "out"}`}>{days} day{days !== 1 ? "s" : ""}</span></td></tr>
         </tbody>
       </table>
+      <div className="row-2" style={{ marginTop: 14 }}>
+        <div className="field"><label>Condition at Return</label>
+          <select value={condition} onChange={e => setCondition(e.target.value)}>
+            <option value="good">Good</option>
+            <option value="damaged">Damaged</option>
+            <option value="lost">Lost / Missing</option>
+          </select>
+        </div>
+        <div className="field"><label>Notes</label><input value={note} onChange={e => setNote(e.target.value)} placeholder="Optional notes" /></div>
+      </div>
+    </Modal>
+  );
+}
+
+function ReserveItemModal({ item, onClose, onReserve, maxQty = 0 }) {
+  const [qty, setQty] = useState("1");
+  const [reservedFor, setReservedFor] = useState("");
+  const parsedQty = Math.max(1, Number(qty) || 1);
+  const invalidQty = parsedQty > maxQty;
+  return (
+    <Modal title={`Reserve: ${item.name}`} onClose={onClose}
+      footer={<><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={() => { const fallbackDate = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10); onReserve(item.id, parsedQty, reservedFor || fallbackDate); }} disabled={maxQty < 1 || invalidQty}>Save Reservation</button></>}>
+      <div className="info-box" style={{ marginBottom: 12 }}>
+        Available to reserve now: <strong>{maxQty}</strong>
+      </div>
+      <div className="row-2">
+        <div className="field"><label>Quantity</label><input type="number" min={1} max={Math.max(1, maxQty)} value={qty} onChange={e => setQty(e.target.value)} /></div>
+        <div className="field"><label>Reserved For Date</label><input type="date" value={reservedFor} onChange={e => setReservedFor(e.target.value)} /></div>
+      </div>
+      {invalidQty && <div style={{ color: "var(--danger)", fontSize: 13 }}>Quantity cannot exceed available stock.</div>}
     </Modal>
   );
 }

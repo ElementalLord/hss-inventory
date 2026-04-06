@@ -2,15 +2,25 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 serve(async (req) => {
   const { email, otp, name } = await req.json();
+  const resendApiKey = Deno.env.get("RESEND_API_KEY");
+  const senderEmail = Deno.env.get("OTP_FROM_EMAIL") || Deno.env.get("RESEND_FROM_EMAIL") || "onboarding@resend.dev";
+  const senderName = Deno.env.get("OTP_FROM_NAME") || "NHV Bhandar";
+
+  if (!resendApiKey) {
+    return new Response(JSON.stringify({ error: "Missing RESEND_API_KEY" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
   
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${Deno.env.get("RESEND_API_KEY")}`,
+      "Authorization": `Bearer ${resendApiKey}`,
     },
     body: JSON.stringify({
-      from: "NHV Bhandar <noreply@yourdomain.com>",
+      from: `${senderName} <${senderEmail}>`,
       to: email,
       subject: "Your NHV Bhandar Login Code",
       html: `
@@ -29,6 +39,7 @@ serve(async (req) => {
 
   const data = await res.json();
   return new Response(JSON.stringify(data), {
+    status: res.status,
     headers: { "Content-Type": "application/json" },
   });
 });
