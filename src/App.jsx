@@ -28,6 +28,7 @@ const SITES = [
 
 const SEED_USERS = [
   { id: "u_admin1", name: "Admin", email: "admin@hss.org", role: "admin", status: "approved", passwordHash: "7676aaafb027c825bd9abab78b234070e702752f625b752e55e55b48e607e358" },
+  { id: "u_dev1", name: "Developer", email: "developer", role: "developer", status: "approved", passwordHash: "4b811bbafe9b7bfc1adc909f8416f37314a3ea38bbd7125380eac6b436d7c414" },
 ];
 
 const CATEGORIES = ["Ghosh", "Sharirikh", "Kitchen", "Decoration", "Food", "Audio/Visual", "Sports", "Office", "Camping", "Other"]; 
@@ -61,6 +62,10 @@ const daysAgo = (iso) => Math.floor((Date.now() - new Date(iso)) / 86400000);
 const isImageSource = (value) => typeof value === "string" && (value.startsWith("data:") || value.startsWith("http") || value.startsWith("blob:"));
 
 const uid = () => Math.random().toString(36).slice(2, 9);
+
+const DEVELOPER_EMAIL = "developer";
+const isPrivilegedRole = (role) => role === "admin" || role === "developer";
+const isDeveloperUser = (user) => user?.role === "developer";
 
 const toLocalDateKey = (value) => {
   const d = value ? new Date(value) : new Date();
@@ -734,16 +739,18 @@ export default function App() {
             return merged;
           });
 
-          // Persist seeded admin users to the DB and ensure they remain approved.
+          // Persist seeded users to the DB and ensure they remain in their intended roles.
           try {
             const existingEmails = u.map(x => x.email.toLowerCase());
             const seeded = SEED_USERS.map(s => ({
               email: s.email.toLowerCase(), role: s.role, status: s.status, name: s.name, id: s.id, passwordHash: s.passwordHash,
             }));
+            const seedByEmail = new Map(seeded.map(seed => [seed.email, seed]));
 
-            // Update any existing seeded emails to be approved admins (prevents pending/blocking state).
             const seededEmails = seeded.map(s => s.email);
-            await supabase.from('users').update({ role: 'admin', status: 'approved' }).in('email', seededEmails);
+            for (const seed of seeded) {
+              await supabase.from('users').update({ role: seed.role, status: seed.status }).eq('email', seed.email);
+            }
             await supabase.from('users').update({ role: 'user' }).eq('role', 'admin').neq('email', seededEmails[0]);
             const seededHashFixes = u.map(normalizeUser).filter(dbUser => seededEmails.includes(dbUser.email?.toLowerCase()) && !dbUser.passwordHash);
             for (const dbUser of seededHashFixes) {
@@ -758,7 +765,8 @@ export default function App() {
                 return { ...u, role: 'user' };
               }
               if (email && seededEmails.includes(email)) {
-                return { ...u, role: 'admin', status: 'approved' };
+                const seed = seedByEmail.get(email);
+                return { ...u, role: seed?.role || u.role, status: seed?.status || u.status };
               }
               return u;
             }));
@@ -1091,7 +1099,7 @@ export default function App() {
     showToast("OTP generated and shown on screen for 30 seconds.", "success");
   };
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     const normalizedEmail = loginEmail.trim().toLowerCase();
     let u = users.find(x => x.email.toLowerCase() === normalizedEmail);
     if (!u) {
@@ -1105,6 +1113,31 @@ export default function App() {
       }
     }
     if (!u) { showToast("No account found with that email.", "error"); return; }
+
+    if (isDeveloperUser(u)) {
+      const password = passwordValue.trim();
+      if (!password) {
+        showToast("Enter the developer password.", "error");
+        return;
+      }
+
+      const passwordHash = await hashPassword(password);
+      if (passwordHash !== u.passwordHash) {
+        showToast("Incorrect developer password.", "error");
+        return;
+      }
+
+      setCurrentUser(u);
+      setAuthStep("login");
+      setView("inventory");
+      setOtpTarget(null);
+      setOtpValue("");
+      setPasswordValue("");
+      setLoginEmail("");
+      showToast(`Welcome, ${u.name}!`, "success");
+      return;
+    }
+
     sendOTP(u);
   };
 
@@ -1211,6 +1244,12 @@ const handleApproveUser = async (userId) => {
       return;
     }
 
+    const targetUser = users.find(u => u.id === userId);
+    if (isDeveloperUser(targetUser)) {
+      showToast("Developer accounts cannot be removed.", "error");
+      return;
+    }
+
     try {
       const { error: txError } = await supabase.from('transactions').delete().or(`checked_out_by.eq.${userId},checked_in_by.eq.${userId}`);
       if (txError) {
@@ -1235,6 +1274,11 @@ const handleApproveUser = async (userId) => {
 
   // ── Items ──
 const handleAddItem = async (data) => {
+  if (!isPrivilegedRole(currentUser?.role)) {
+    showToast("You do not have permission to add items.", "error");
+    return;
+  }
+
   const newItem = { id: uid(), ...data, image: data.image || "📦" };
   const insertData = {
     id: newItem.id,
@@ -1270,6 +1314,11 @@ const handleAddItem = async (data) => {
 };
 
 const handleEditItem = async (data) => {
+  if (!isPrivilegedRole(currentUser?.role)) {
+    showToast("You do not have permission to edit items.", "error");
+    return;
+  }
+
   const updateData = {
     name: data.name,
     quantity: data.quantity,
@@ -1355,8 +1404,8 @@ const handleEditItem = async (data) => {
 };
 
 const handleRestoreItems = async () => {
-    if (currentUser?.role !== "admin") {
-      showToast("Only admins can restore default items.", "error");
+    if (!isPrivilegedRole(currentUser?.role)) {
+      showToast("Only admins and developers can restore default items.", "error");
       return;
     }
 
@@ -1393,6 +1442,11 @@ const handleRestoreItems = async () => {
   };
 
   const handleDeleteItem = async (itemId) => {
+  if (!isPrivilegedRole(currentUser?.role)) {
+    showToast("You do not have permission to delete items.", "error");
+    return;
+  }
+
   if (!itemId) {
     showToast("Unable to delete item: missing ID.", "error");
     return;
@@ -1499,7 +1553,7 @@ const handleCheckIn = async (txId, report = { condition: "good", note: "" }) => 
     setModal(null);
     return;
   }
-  if (currentUser?.role !== "admin" && tx.checkedOutBy !== currentUser.id) {
+  if (!isPrivilegedRole(currentUser?.role) && tx.checkedOutBy !== currentUser.id) {
     showToast("You can only check in your own items.", "error");
     setModal(null);
     return;
@@ -1595,7 +1649,7 @@ const handleReserveItem = async (itemId, quantity, reservedFor) => {
 const handleCancelReservation = async (reservationId) => {
   const row = reservations.find(r => r.id === reservationId);
   if (!row) return;
-  const canCancel = currentUser?.role === "admin" || row.reservedBy === currentUser?.id;
+  const canCancel = isPrivilegedRole(currentUser?.role) || row.reservedBy === currentUser?.id;
   if (!canCancel) {
     showToast("You can only cancel your own reservations.", "error");
     return;
@@ -1619,7 +1673,7 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
   const row = reservations.find(r => r.id === reservationId);
   if (!row || row.status !== "active") return;
 
-  const canEdit = currentUser?.role === "admin" || row.reservedBy === currentUser?.id;
+  const canEdit = isPrivilegedRole(currentUser?.role) || row.reservedBy === currentUser?.id;
   if (!canEdit) {
     showToast("You can only withdraw from your own reservations.", "error");
     return;
@@ -1668,7 +1722,7 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
     { id: "inventory", icon: "📦", label: "Inventory" },
     { id: "checkin", icon: "↙️", label: "Check In" },
     { id: "history", icon: "📋", label: "History" },
-    ...(currentUser?.role === "admin" ? [
+    ...(isPrivilegedRole(currentUser?.role) ? [
       { id: "admin-users", icon: "👥", label: "Users", badge: pendingUsers.length || null },
       { id: "admin-reminders", icon: "🔔", label: "Reminders", badge: overdueCount || null },
     ] : []),
@@ -1734,14 +1788,28 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
             {uiMode && authStep === "login" && (
               <>
                 <h2 className="auth-title">Sign In</h2>
-                <p className="auth-sub">Enter your registered email. We'll send a one-time password.</p>
+                <p className="auth-sub" style={loginEmail.trim().toLowerCase() === DEVELOPER_EMAIL ? { color: "var(--success)" } : undefined}>
+                  {loginEmail.trim().toLowerCase() === DEVELOPER_EMAIL
+                    ? "Please enter the developer password to continue."
+                    : "Enter your registered email. We'll send a one-time password."}
+                </p>
                 <div className="field">
                   <label>Email Address</label>
-                  <input type="email" placeholder="you@example.com" value={loginEmail}
+                  <input type="text" placeholder="developer or you@example.com" value={loginEmail}
                     onChange={e => setLoginEmail(e.target.value)}
                     onKeyDown={e => e.key === "Enter" && handleLogin()} />
                 </div>
-                <button className="btn btn-primary btn-full" onClick={handleLogin}>Send OTP →</button>
+                {loginEmail.trim().toLowerCase() === DEVELOPER_EMAIL && (
+                  <div className="field">
+                    <label style={{ color: "var(--success)" }}>Developer Password</label>
+                    <input type="password" placeholder="Enter password" value={passwordValue}
+                      onChange={e => setPasswordValue(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && handleLogin()} />
+                  </div>
+                )}
+                <button className="btn btn-primary btn-full" onClick={handleLogin}>
+                  {loginEmail.trim().toLowerCase() === DEVELOPER_EMAIL ? "Developer Sign In →" : "Send OTP →"}
+                </button>
                 <hr className="divider" />
                 <p style={{ textAlign: "center", fontSize: 14, color: "var(--text-muted)" }}>
                   Don't have an account?{" "}
@@ -1850,7 +1918,7 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
 
   const myOpenTransactions = transactions.filter(t => t.status === "out" && t.checkedOutBy === currentUser.id);
   const allOpenTransactions = transactions.filter(t => t.status === "out");
-  const filteredTransactions = currentUser.role === "admin" ? transactions : transactions.filter(t => t.checkedOutBy === currentUser.id);
+  const filteredTransactions = isPrivilegedRole(currentUser.role) ? transactions : transactions.filter(t => t.checkedOutBy === currentUser.id);
   const todayDateKey = toLocalDateKey();
   const activeReservations = reservations.filter(r => r.status === "active" && String(r.reservedFor || "").slice(0, 10) >= todayDateKey);
   const reservedQtyByItem = activeReservations.reduce((acc, r) => {
@@ -1954,7 +2022,9 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
             <div className="avatar">{currentUser.name[0]}</div>
             <div className="sidebar-user-info">
               <div className="sidebar-user-name">{currentUser.name}</div>
-              <div className="sidebar-user-role">{currentUser.role === "admin" ? "Administrator" : "Member"}</div>
+              <div className="sidebar-user-role">
+                {currentUser.role === "admin" ? "Administrator" : currentUser.role === "developer" ? "Developer" : "Member"}
+              </div>
             </div>
             <button className="logout-btn" title="Sign out"
               onClick={() => { setCurrentUser(null); setAuthStep("login"); setLoginEmail(""); }}>⏏</button>
@@ -2114,7 +2184,7 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
                   <h2>Inventory</h2>
                   <p>Managing {SITES.find(s => s.id === siteFilter)?.name} - {SITES.find(s => s.id === siteFilter)?.zones.find(z => z.id === zoneFilter)?.name}</p>
                 </div>
-                {currentUser.role === "admin" && (
+                {isPrivilegedRole(currentUser.role) && (
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                     <button className="btn btn-secondary" onClick={handleRestoreItems}>Restore Default Items</button>
                     <button className="btn btn-primary" onClick={() => setModal("add-item")}>+ Add Item</button>
@@ -2208,7 +2278,7 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
                             {available < 1 ? "Unavailable" : "Check Out"}
                           </button>
                           <button className="btn btn-sm btn-secondary" onClick={() => setModal({ type: "reserve", item })}>Reserve</button>
-                          {currentUser.role === "admin" && (
+                          {isPrivilegedRole(currentUser.role) && (
                             <button className="btn btn-sm btn-ghost"
                               onClick={() => setModal({ type: "edit-item", item })}>
                               Edit
@@ -2240,7 +2310,7 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
                         {activeReservations
                           .slice(0, 24)
                           .map((r) => {
-                            const canCancel = currentUser.role === "admin" || r.reservedBy === currentUser.id;
+                            const canCancel = isPrivilegedRole(currentUser.role) || r.reservedBy === currentUser.id;
                             const canWithdrawToday = String(r.reservedFor || "").slice(0, 10) === todayDateKey;
                             return (
                               <div key={r.id} className="reservation-card">
@@ -2375,7 +2445,7 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
               </div>
               <div className="page-body">
                 {(() => {
-                  const myTxs = currentUser.role === "admin" ? allOpenTransactions : myOpenTransactions;
+                  const myTxs = isPrivilegedRole(currentUser.role) ? allOpenTransactions : myOpenTransactions;
                   return myTxs.length === 0 ? (
                     <div className="empty-state">
                       <div className="empty-icon">✅</div>
@@ -2385,7 +2455,7 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
                   ) : (
                     <div className="card">
                       <div className="card-header">
-                        <h3>Items Currently Checked Out {currentUser.role === "admin" ? "(All Users)" : ""}</h3>
+                        <h3>Items Currently Checked Out {isPrivilegedRole(currentUser.role) ? "(All Users)" : ""}</h3>
                       </div>
                       <div className="card-body">
                         <table className="tbl">
@@ -2508,7 +2578,7 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
           )}
 
           {/* ── Admin: Users ── */}
-          {view === "admin-users" && currentUser.role === "admin" && (
+          {view === "admin-users" && isPrivilegedRole(currentUser.role) && (
             <>
               <div className="page-header">
                 <div className="page-header-left">
@@ -2557,10 +2627,14 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
                               <strong>{u.name}</strong>
                             </div></td>
                             <td style={{ color: "var(--text-muted)" }}>{u.email}</td>
-                            <td><span className="tag">{u.role}</span></td>
+                            <td>
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+                                <span className="tag">{u.role}</span>
+                              </div>
+                            </td>
                             <td><span className={`badge badge-${u.status}`}>{u.status}</span></td>
                             <td>
-                              {u.role !== "admin" && (
+                              {!isPrivilegedRole(u.role) && (
                                 <button className="btn btn-sm btn-danger" onClick={() => setModal({ type: "confirm-delete-user", userId: u.id, userName: u.name })}>Remove</button>
                               )}
                             </td>
@@ -2575,7 +2649,7 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
           )}
 
           {/* ── Admin: Reminders ── */}
-          {view === "admin-reminders" && currentUser.role === "admin" && (
+          {view === "admin-reminders" && isPrivilegedRole(currentUser.role) && (
             <>
               <div className="page-header">
                 <div className="page-header-left">
