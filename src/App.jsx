@@ -1,4 +1,5 @@
 import { supabase } from './supabase.js'
+import { DEVELOPER_USERNAME, normalizeEmail, isPrivilegedRole, isDeveloperUser, canDeleteUser, canAssignRole } from './security.js'
 import { useState, useEffect, useRef } from "react";
 
 // ── Locations & Sites (Vibhags & Shakhas) ────────────────────────────────────
@@ -62,10 +63,6 @@ const daysAgo = (iso) => Math.floor((Date.now() - new Date(iso)) / 86400000);
 const isImageSource = (value) => typeof value === "string" && (value.startsWith("data:") || value.startsWith("http") || value.startsWith("blob:"));
 
 const uid = () => Math.random().toString(36).slice(2, 9);
-
-const DEVELOPER_EMAIL = "developer";
-const isPrivilegedRole = (role) => role === "admin" || role === "developer";
-const isDeveloperUser = (user) => user?.role === "developer";
 
 const toLocalDateKey = (value) => {
   const d = value ? new Date(value) : new Date();
@@ -1100,14 +1097,14 @@ export default function App() {
   };
 
   const handleLogin = async () => {
-    const normalizedEmail = loginEmail.trim().toLowerCase();
-    let u = users.find(x => x.email.toLowerCase() === normalizedEmail);
+    const normalizedEmail = normalizeEmail(loginEmail);
+    let u = users.find(x => normalizeEmail(x.email) === normalizedEmail);
     if (!u) {
       // Fallback to seeded users in case Supabase hasn’t been seeded / is empty
-      u = SEED_USERS.find(x => x.email.toLowerCase() === normalizedEmail);
+      u = SEED_USERS.find(x => normalizeEmail(x.email) === normalizedEmail);
       if (u) {
         setUsers(prev => {
-          if (prev.some(x => x.email.toLowerCase() === normalizedEmail)) return prev;
+          if (prev.some(x => normalizeEmail(x.email) === normalizedEmail)) return prev;
           return [...prev, u];
         });
       }
@@ -1143,8 +1140,8 @@ export default function App() {
 
   const handleRegister = async () => {
     if (!regData.name || !regData.email || !regData.password) { showToast("Please fill in all fields.", "error"); return; }
-    const emailLower = regData.email.trim().toLowerCase();
-    const exists = users.find(x => x.email.toLowerCase() === emailLower);
+    const emailLower = normalizeEmail(regData.email);
+    const exists = users.find(x => normalizeEmail(x.email) === emailLower);
     if (exists) { showToast("An account with that email already exists.", "error"); return; }
 
     const passwordHash = await hashPassword(regData.password.trim());
@@ -1233,10 +1230,67 @@ export default function App() {
   };
 
 const handleApproveUser = async (userId) => {
-  await supabase.from('users').update({ status: "approved" }).eq('id', userId);
-  setUsers(prev => prev.map(u => u.id === userId ? { ...u, status: "approved" } : u));
-  showToast("User approved!", "success");
+  const targetUser = users.find(u => u.id === userId);
+  if (!targetUser) {
+    showToast("Unable to approve user: missing record.", "error");
+    return;
+  }
+
+  setModal({
+    type: "privileged-user-action",
+    action: "update-user-status",
+    title: `Approve ${targetUser.name}`,
+    description: "Enter your password to approve this account.",
+    confirmLabel: "Approve User",
+    targetUser,
+    status: "approved",
+  });
 };
+
+  const runPrivilegedAction = async (action, payload, actorPassword) => {
+    const password = String(actorPassword || "").trim();
+    if (!password) {
+      throw new Error("Please enter your password.");
+    }
+
+    const { data, error } = await supabase.functions.invoke("privileged-action", {
+      body: {
+        action,
+        actorEmail: currentUser.email,
+        actorPassword: password,
+        payload,
+      },
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    if (data?.error) {
+      throw new Error(data.error);
+    }
+
+    return data;
+  };
+
+  const handleRequestUserRoleChange = (user) => {
+    if (!user) return;
+    if (!canAssignRole(currentUser?.role, user, user.role)) {
+      showToast("Developer accounts are protected.", "error");
+      return;
+    }
+
+    setModal({
+      type: "privileged-user-action",
+      action: "update-user-role",
+      title: `Change role for ${user.name}`,
+      description: "Select the new role, then confirm with your password.",
+      confirmLabel: "Save Role",
+      targetUser: user,
+      selectedRole: user.role,
+      allowedRoles: currentUser?.role === "developer" ? ["user", "admin", "developer"] : ["user", "admin"],
+    });
+  };
 
   const handleDeleteUser = async (userId) => {
     if (!userId) {
@@ -1245,30 +1299,93 @@ const handleApproveUser = async (userId) => {
     }
 
     const targetUser = users.find(u => u.id === userId);
-    if (isDeveloperUser(targetUser)) {
+    if (!targetUser) {
+      showToast("Unable to remove user: missing record.", "error");
+      return;
+    }
+
+    if (!canDeleteUser(currentUser?.role, targetUser)) {
       showToast("Developer accounts cannot be removed.", "error");
       return;
     }
 
+    setModal({
+      type: "privileged-user-action",
+      action: "delete-user",
+      title: `Remove ${targetUser.name}?`,
+      description: "Enter your password to remove this user and their related transactions.",
+      confirmLabel: "Remove User",
+      targetUser,
+    });
+  };
+
+  const handlePrivilegedAction = async (actionData) => {
+    const password = String(actionData?.password || "").trim();
+    const action = String(actionData?.action || "").trim();
+    const targetUser = actionData?.targetUser;
+    const targetItem = actionData?.targetItem;
+    const selectedRole = String(actionData?.selectedRole || targetUser?.role || "").trim();
+    const status = String(actionData?.status || "").trim();
+
     try {
-      const { error: txError } = await supabase.from('transactions').delete().or(`checked_out_by.eq.${userId},checked_in_by.eq.${userId}`);
-      if (txError) {
-        console.error("Delete related transactions error:", txError);
-        showToast("Failed to remove related transactions.", "error");
-        return;
+      let data;
+
+      if (action === "update-user-role") {
+        data = await runPrivilegedAction(action, { userId: targetUser.id, role: selectedRole }, password);
+      } else if (action === "update-user-status") {
+        data = await runPrivilegedAction(action, { userId: targetUser.id, status }, password);
+      } else if (action === "delete-user") {
+        data = await runPrivilegedAction(action, { userId: targetUser.id }, password);
+      } else if (action === "add-item") {
+        data = await runPrivilegedAction(action, { item: actionData.item }, password);
+      } else if (action === "edit-item") {
+        data = await runPrivilegedAction(action, { item: actionData.item }, password);
+      } else if (action === "delete-item") {
+        data = await runPrivilegedAction(action, { itemId: targetItem?.id || actionData.itemId }, password);
+      } else if (action === "restore-items") {
+        data = await runPrivilegedAction(action, { items: actionData.items }, password);
+      } else {
+        throw new Error(`Unsupported action: ${action}`);
       }
 
-      const { error } = await supabase.from('users').delete().match({ id: userId });
-      if (!error) {
-        setUsers(prev => prev.filter(u => u.id !== userId));
+      if (action === "update-user-role" && data?.user) {
+        setUsers(prev => prev.map(u => u.id === data.user.id ? { ...u, role: data.user.role } : u));
+        setModal(null);
+        showToast(`Updated ${data.user.name || targetUser.name}'s role.`, "success");
+      } else if (action === "update-user-status" && data?.user) {
+        setUsers(prev => prev.map(u => u.id === data.user.id ? { ...u, status: data.user.status } : u));
+        setModal(null);
+        showToast(`Approved ${data.user.name || targetUser.name}.`, "success");
+      } else if (action === "delete-user") {
+        setUsers(prev => prev.filter(u => u.id !== targetUser.id));
+        setModal(null);
         showToast("User removed.", "success");
-      } else {
-        console.error("Delete user error:", error);
-        showToast("Failed to remove user: " + error.message, "error");
+      } else if (action === "add-item" && data?.item) {
+        setItems(prev => [...prev, normalizeItem(data.item)]);
+        setModal(null);
+        showToast("Item added!", "success");
+      } else if (action === "edit-item" && data?.item) {
+        setItems(prev => prev.map(it => it.id === data.item.id ? normalizeItem(data.item) : it));
+        setModal(null);
+        showToast("Item updated!", "success");
+      } else if (action === "delete-item") {
+        setItems(prev => prev.filter(it => it.id !== (targetItem?.id || actionData.itemId)));
+        setTransactions(prev => prev.filter(t => t.itemId !== (targetItem?.id || actionData.itemId)));
+        setModal(null);
+        showToast("Item deleted.", "success");
+      } else if (action === "restore-items") {
+        const restored = Number(data?.restored || 0);
+        if (restored > 0) {
+          const existingIds = new Set(items.map(item => item.id));
+          const missing = SEED_ITEMS.filter(item => !existingIds.has(item.id));
+          setItems(prev => [...prev, ...missing]);
+        }
+        setModal(null);
+        showToast(restored > 0 ? `Restored ${restored} default items.` : "Default items are already present.", "success");
       }
     } catch (err) {
-      console.error("Delete user exception:", err);
-      showToast("Failed to remove user.", "error");
+      console.error("Privileged action error:", err);
+      showToast(err?.message || "Unable to complete privileged action.", "error");
     }
   };
 
@@ -1279,36 +1396,29 @@ const handleAddItem = async (data) => {
     return;
   }
 
-  const newItem = { id: uid(), ...data, image: data.image || "📦" };
-  const insertData = {
-    id: newItem.id,
-    name: newItem.name,
-    quantity: newItem.quantity,
-    category: newItem.category,
-    condition: newItem.condition || "Good",
-    image: newItem.image,
-  };
-  
-  // Only include location fields if they have values
-  if (newItem.siteId) insertData.siteId = newItem.siteId;
-  if (newItem.zoneId) insertData.zoneId = newItem.zoneId;
-  if (newItem.locationDescription) {
-    insertData.location = newItem.locationDescription;
-    insertData.locationDescription = newItem.locationDescription;
-  }
-  
   try {
-    const { data: inserted, error } = await supabase.from('items').insert([insertData]).select().single();
-    if (!error && inserted) {
-      setItems(prev => [...prev, normalizeItem(inserted)]);
-      showToast("Item added!", "success");
-    } else {
-      console.error("Insert error:", error);
-      showToast("Failed to add item: " + error.message, "error");
-    }
+      const response = await runPrivilegedAction("add-item", {
+        item: {
+          id: uid(),
+          name: data.name,
+          quantity: Number(data.quantity || 0),
+          category: data.category,
+          condition: data.condition || "Good",
+          image: data.image || "📦",
+          siteId: data.siteId,
+          zoneId: data.zoneId,
+          location: data.locationDescription,
+          locationDescription: data.locationDescription,
+        },
+      }, data.password);
+
+      if (response?.item) {
+        setItems(prev => [...prev, normalizeItem(response.item)]);
+        showToast("Item added!", "success");
+      }
   } catch (err) {
     console.error("Insert exception:", err);
-    showToast("Failed to add item.", "error");
+      showToast(err?.message || "Failed to add item.", "error");
   }
   setModal(null);
 };
@@ -1319,86 +1429,28 @@ const handleEditItem = async (data) => {
     return;
   }
 
-  const updateData = {
-    name: data.name,
-    quantity: data.quantity,
-    category: data.category,
-    condition: data.condition || "Good",
-    image: data.image,
-  };
-  
-  // Only include location fields if they have values (to avoid errors if columns don't exist)
-  if (data.siteId) updateData.siteId = data.siteId;
-  if (data.zoneId) updateData.zoneId = data.zoneId;
-  if (data.locationDescription !== undefined) {
-    updateData.location = data.locationDescription;
-    updateData.locationDescription = data.locationDescription;
-  }
-  
   try {
-    const payloads = [
-      updateData,
-      (() => {
-        const p = { ...updateData };
-        delete p.locationDescription;
-        return p;
-      })(),
-      (() => {
-        const p = { ...updateData };
-        delete p.locationDescription;
-        delete p.siteId;
-        delete p.zoneId;
-        return p;
-      })(),
-      {
+    const response = await runPrivilegedAction("edit-item", {
+      item: {
+        id: data.id,
         name: data.name,
-        quantity: data.quantity,
+        quantity: Number(data.quantity || 0),
         category: data.category,
         condition: data.condition || "Good",
         image: data.image,
+        siteId: data.siteId,
+        zoneId: data.zoneId,
+        locationDescription: data.locationDescription,
       },
-      {
-        name: data.name,
-        quantity: data.quantity,
-        category: data.category,
-        image: data.image,
-      },
-    ];
+    }, data.password);
 
-    let updated = null;
-    let lastError = null;
-
-    for (const payload of payloads) {
-      const { data: row, error } = await supabase
-        .from('items')
-        .update(payload)
-        .eq('id', data.id)
-        .select('*')
-        .maybeSingle();
-
-      if (!error) {
-        updated = row;
-        lastError = null;
-        break;
-      }
-      lastError = error;
+    if (response?.item) {
+      setItems(prev => prev.map(it => it.id === response.item.id ? normalizeItem(response.item) : it));
+      showToast("Item updated!", "success");
     }
-
-    if (lastError) {
-      console.error("Update error:", lastError);
-      showToast("Failed to update item: " + lastError.message, "error");
-      return;
-    }
-
-    setItems(prev => prev.map(it => {
-      if (it.id !== data.id) return it;
-      const base = updated ? normalizeItem(updated) : { ...it, ...data };
-      return { ...base, condition: data.condition || base.condition || "Good" };
-    }));
-    showToast("Item updated!", "success");
   } catch (err) {
     console.error("Update exception:", err);
-    showToast("Failed to update item.", "error");
+    showToast(err?.message || "Failed to update item.", "error");
   }
   setModal(null);
 };
@@ -1409,39 +1461,17 @@ const handleRestoreItems = async () => {
       return;
     }
 
-    try {
-      const { data: existingItems, error: fetchError } = await supabase.from('items').select('id');
-      if (fetchError) throw fetchError;
-      const existingIds = (existingItems || []).map(i => i.id);
-      const missing = SEED_ITEMS.filter(i => !existingIds.includes(i.id));
-      if (!missing.length) {
-        showToast("Default items are already present.", "info");
-        return;
-      }
-      const { error: insertError } = await supabase.from('items').insert(missing.map(i => ({
-        id: i.id, name: i.name, quantity: i.quantity, category: i.category,
-        siteId: i.siteId, zoneId: i.zoneId,
-        location: i.locationDescription,
-        locationDescription: i.locationDescription,
-        condition: i.condition || "Good",
-        image: i.image,
-      })));
-      if (insertError) throw insertError;
-      setItems(prev => {
-        const merged = [...prev];
-        missing.forEach(item => {
-          if (!merged.some(i => i.id === item.id)) merged.push(item);
-        });
-        return merged;
-      });
-      showToast(`Restored ${missing.length} default items.`, "success");
-    } catch (err) {
-      console.error("Restore items error:", err);
-      showToast("Failed to restore default items.", "error");
-    }
+    setModal({
+      type: "privileged-user-action",
+      action: "restore-items",
+      title: "Restore Default Items",
+      description: "Enter your password to restore any missing default inventory items.",
+      confirmLabel: "Restore Items",
+      items: SEED_ITEMS,
+    });
   };
 
-  const handleDeleteItem = async (itemId) => {
+  const handleDeleteItem = async (itemId, password) => {
   if (!isPrivilegedRole(currentUser?.role)) {
     showToast("You do not have permission to delete items.", "error");
     return;
@@ -1453,25 +1483,15 @@ const handleRestoreItems = async () => {
   }
 
   try {
-    const { error: txError } = await supabase.from('transactions').delete().match({ item_id: itemId });
-    if (txError) {
-      console.error("Delete related transactions error:", txError);
-      showToast("Failed to remove related transactions.", "error");
-      return;
-    }
-
-    const { error } = await supabase.from('items').delete().match({ id: itemId });
-    if (!error) {
+    const response = await runPrivilegedAction("delete-item", { itemId }, password);
+    if (response?.ok) {
       setItems(prev => prev.filter(i => i.id !== itemId));
       setTransactions(prev => prev.filter(t => t.itemId !== itemId));
       showToast("Item deleted.", "success");
-    } else {
-      console.error("Delete item error:", error);
-      showToast("Failed to delete item: " + error.message, "error");
     }
   } catch (err) {
     console.error("Delete item exception:", err);
-    showToast("Failed to delete item.", "error");
+    showToast(err?.message || "Failed to delete item.", "error");
   }
 
   setModal(null);
@@ -1788,8 +1808,8 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
             {uiMode && authStep === "login" && (
               <>
                 <h2 className="auth-title">Sign In</h2>
-                <p className="auth-sub" style={loginEmail.trim().toLowerCase() === DEVELOPER_EMAIL ? { color: "var(--success)" } : undefined}>
-                  {loginEmail.trim().toLowerCase() === DEVELOPER_EMAIL
+                <p className="auth-sub" style={normalizeEmail(loginEmail) === DEVELOPER_USERNAME ? { color: "var(--success)" } : undefined}>
+                  {normalizeEmail(loginEmail) === DEVELOPER_USERNAME
                     ? "Please enter the developer password to continue."
                     : "Enter your registered email. We'll send a one-time password."}
                 </p>
@@ -1799,7 +1819,7 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
                     onChange={e => setLoginEmail(e.target.value)}
                     onKeyDown={e => e.key === "Enter" && handleLogin()} />
                 </div>
-                {loginEmail.trim().toLowerCase() === DEVELOPER_EMAIL && (
+                {normalizeEmail(loginEmail) === DEVELOPER_USERNAME && (
                   <div className="field">
                     <label style={{ color: "var(--success)" }}>Developer Password</label>
                     <input type="password" placeholder="Enter password" value={passwordValue}
@@ -1808,7 +1828,7 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
                   </div>
                 )}
                 <button className="btn btn-primary btn-full" onClick={handleLogin}>
-                  {loginEmail.trim().toLowerCase() === DEVELOPER_EMAIL ? "Developer Sign In →" : "Send OTP →"}
+                  {normalizeEmail(loginEmail) === DEVELOPER_USERNAME ? "Developer Sign In →" : "Send OTP →"}
                 </button>
                 <hr className="divider" />
                 <p style={{ textAlign: "center", fontSize: 14, color: "var(--text-muted)" }}>
@@ -2604,7 +2624,7 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
                               <td>
                                 <div style={{ display: "flex", gap: 8 }}>
                                   <button className="btn btn-sm btn-forest" onClick={() => handleApproveUser(u.id)}>✓ Approve</button>
-                                  <button className="btn btn-sm btn-danger" onClick={() => setModal({ type: "confirm-delete-user", userId: u.id, userName: u.name })}>✕ Remove</button>
+                                  <button className="btn btn-sm btn-danger" onClick={() => handleDeleteUser(u.id)}>✕ Remove</button>
                                 </div>
                               </td>
                             </tr>
@@ -2630,12 +2650,20 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
                             <td>
                               <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
                                 <span className="tag">{u.role}</span>
+                                {canAssignRole(currentUser.role, u, u.role) && (
+                                  <button className="btn btn-sm btn-ghost" style={{ marginTop: 8 }} onClick={() => handleRequestUserRoleChange(u)}>
+                                    Change Role
+                                  </button>
+                                )}
+                                {u.role === "developer" && (
+                                  <span style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>Protected</span>
+                                )}
                               </div>
                             </td>
                             <td><span className={`badge badge-${u.status}`}>{u.status}</span></td>
                             <td>
-                              {!isPrivilegedRole(u.role) && (
-                                <button className="btn btn-sm btn-danger" onClick={() => setModal({ type: "confirm-delete-user", userId: u.id, userName: u.name })}>Remove</button>
+                              {!isDeveloperUser(u) && (
+                                <button className="btn btn-sm btn-danger" onClick={() => handleDeleteUser(u.id)}>Remove</button>
                               )}
                             </td>
                           </tr>
@@ -2743,11 +2771,11 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
           onWithdraw={handleWithdrawReservation}
         />
       )}
-      {modal?.type === "confirm-delete-user" && (
-        <ConfirmDeleteUserModal
-          user={modal}
+      {modal?.type === "privileged-user-action" && (
+        <PrivilegedUserActionModal
+          modal={modal}
           onClose={() => setModal(null)}
-          onConfirm={() => { handleDeleteUser(modal.userId); setModal(null); }}
+          onConfirm={handlePrivilegedAction}
         />
       )}
       {statModal && (
@@ -2855,9 +2883,67 @@ function ConfirmDeleteUserModal({ user, onClose, onConfirm }) {
   );
 }
 
+function PrivilegedUserActionModal({ modal, onClose, onConfirm }) {
+  const [password, setPassword] = useState("");
+  const [selectedRole, setSelectedRole] = useState(modal.selectedRole || modal.targetUser?.role || "user");
+
+  const isRoleAction = modal.action === "update-user-role";
+
+  return (
+    <Modal
+      title={modal.title}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button
+            className="btn btn-danger"
+            onClick={() => onConfirm({
+              ...modal,
+              password,
+              selectedRole,
+            })}
+          >
+            {modal.confirmLabel || "Confirm"}
+          </button>
+        </>
+      }
+    >
+      <div style={{ color: "var(--text-muted)", marginBottom: 18 }}>
+        {modal.description}
+      </div>
+      {isRoleAction && (
+        <div className="field">
+          <label>Role</label>
+          <select value={selectedRole} onChange={e => setSelectedRole(e.target.value)}>
+            {(modal.allowedRoles || ["user", "admin"]).map(role => (
+              <option key={role} value={role}>{role}</option>
+            ))}
+          </select>
+        </div>
+      )}
+      <div className="field">
+        <label>Password</label>
+        <input
+          type="password"
+          placeholder="Enter your password"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && onConfirm({
+            ...modal,
+            password,
+            selectedRole,
+          })}
+        />
+      </div>
+    </Modal>
+  );
+}
+
 // ── Add Item Modal ────────────────────────────────────────────────────────────
 function AddItemModal({ onClose, onSave }) {
   const [form, setForm] = useState({ name: "", quantity: 1, category: "Ghosh", condition: "Good", siteId: SITES[0].id, zoneId: SITES[0].zones[0].id, locationDescription: "", image: "📦" });
+  const [privilegedPassword, setPrivilegedPassword] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showZoom, setShowZoom] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -2871,7 +2957,7 @@ function AddItemModal({ onClose, onSave }) {
 
   return (
     <Modal title="Add Inventory Item" onClose={onClose}
-      footer={<><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={() => { if (form.name && form.locationDescription && form.image) onSave({ ...form, quantity: +form.quantity }); }} disabled={!form.name || !form.locationDescription || !form.image}>Add Item</button></>}>
+      footer={<><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={() => { if (form.name && form.locationDescription && form.image && privilegedPassword) onSave({ ...form, quantity: +form.quantity, password: privilegedPassword }); }} disabled={!form.name || !form.locationDescription || !form.image || !privilegedPassword}>Add Item</button></>}>
       <div className="field"><label>Item Name</label><input placeholder="e.g. Dhol" value={form.name} onChange={e => set("name", e.target.value)} /></div>
       
       <div className="field">
@@ -2949,6 +3035,7 @@ function AddItemModal({ onClose, onSave }) {
         </div>
       </div>
       <div className="field"><label>Exact Location Description</label><input placeholder="e.g. Shelf 1, Top Row or Cabinet A, Left side" value={form.locationDescription} onChange={e => set("locationDescription", e.target.value)} /></div>
+      <div className="field"><label>Password</label><input type="password" placeholder="Confirm with password" value={privilegedPassword} onChange={e => setPrivilegedPassword(e.target.value)} /></div>
     </Modal>
   );
 }
@@ -2964,6 +3051,7 @@ function EditItemModal({ item, onClose, onSave, onDelete }) {
   });
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showZoom, setShowZoom] = useState(false);
+  const [privilegedPassword, setPrivilegedPassword] = useState("");
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const currentSite = SITES.find(s => s.id === form.siteId);
   const handleImageFile = (file) => {
@@ -2975,7 +3063,7 @@ function EditItemModal({ item, onClose, onSave, onDelete }) {
 
   return (
     <Modal title="Edit Item" onClose={onClose}
-      footer={<><button className="btn btn-danger btn-sm" onClick={() => onDelete(item.id)}>Delete</button><div style={{ flex: 1 }} /><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={() => onSave({ ...form, quantity: +form.quantity })}>Save Changes</button></>}>
+      footer={<><button className="btn btn-danger btn-sm" onClick={() => onDelete(item.id, privilegedPassword)} disabled={!privilegedPassword}>Delete</button><div style={{ flex: 1 }} /><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={() => { if (privilegedPassword) onSave({ ...form, quantity: +form.quantity, password: privilegedPassword }); }} disabled={!privilegedPassword}>Save Changes</button></>}>
       <div className="field"><label>Item Name</label><input value={form.name} onChange={e => set("name", e.target.value)} /></div>
       
       <div className="field">
@@ -3053,6 +3141,7 @@ function EditItemModal({ item, onClose, onSave, onDelete }) {
         </div>
       </div>
       <div className="field"><label>Exact Location Description</label><input value={form.locationDescription} onChange={e => set("locationDescription", e.target.value)} /></div>
+      <div className="field"><label>Password</label><input type="password" placeholder="Confirm with password" value={privilegedPassword} onChange={e => setPrivilegedPassword(e.target.value)} /></div>
     </Modal>
   );
 }
