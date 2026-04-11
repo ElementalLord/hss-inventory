@@ -8,7 +8,7 @@ export const isDeveloperUser = (user) => user?.role === "developer";
 
 export const canDeleteUser = (actorRole, targetUser) => {
   if (!isPrivilegedRole(actorRole)) return false;
-  return !isDeveloperUser(targetUser);
+  return Boolean(targetUser);
 };
 
 export const canAssignRole = (actorRole, targetUser, nextRole) => {

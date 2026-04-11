@@ -722,10 +722,12 @@ export default function App() {
           supabase.from('transactions').select('*'),
         ]);
 
-        if (u?.length) {
+        const dbUsers = Array.isArray(u) ? u : [];
+
+        if (dbUsers.length) {
           setUsers(prev => {
             const merged = [...prev];
-            u.map(normalizeUser).forEach(dbUser => {
+            dbUsers.map(normalizeUser).forEach(dbUser => {
               const idx = merged.findIndex(x => x.email.toLowerCase() === dbUser.email.toLowerCase());
               if (idx > -1) {
                 merged[idx] = { ...merged[idx], ...dbUser, passwordHash: dbUser.passwordHash ?? merged[idx].passwordHash };
@@ -735,54 +737,69 @@ export default function App() {
             });
             return merged;
           });
+        }
 
-          // Persist seeded users to the DB and ensure they remain in their intended roles.
-          try {
-            const existingEmails = u.map(x => x.email.toLowerCase());
-            const seeded = SEED_USERS.map(s => ({
-              email: s.email.toLowerCase(), role: s.role, status: s.status, name: s.name, id: s.id, passwordHash: s.passwordHash,
-            }));
-            const seedByEmail = new Map(seeded.map(seed => [seed.email, seed]));
+        // Persist seeded users to the DB and ensure they remain in their intended roles.
+        try {
+          const existingEmails = dbUsers.map(x => x.email.toLowerCase());
+          const seeded = SEED_USERS.map(s => ({
+            email: s.email.toLowerCase(), role: s.role, status: s.status, name: s.name, id: s.id, passwordHash: s.passwordHash,
+          }));
+          const seedByEmail = new Map(seeded.map(seed => [seed.email, seed]));
 
-            const seededEmails = seeded.map(s => s.email);
-            for (const seed of seeded) {
-              await supabase.from('users').update({ role: seed.role, status: seed.status }).eq('email', seed.email);
+          const seededEmails = seeded.map(s => s.email);
+          for (const seed of seeded) {
+            await supabase.from('users').update({ role: seed.role, status: seed.status }).eq('email', seed.email);
+          }
+          await supabase.from('users').update({ role: 'user' }).eq('role', 'admin').neq('email', seededEmails[0]);
+          const seededHashFixes = dbUsers.map(normalizeUser).filter(dbUser => seededEmails.includes(dbUser.email?.toLowerCase()) && !dbUser.passwordHash);
+          for (const dbUser of seededHashFixes) {
+            const seed = seeded.find(s => s.email === dbUser.email.toLowerCase());
+            if (seed?.passwordHash) {
+              await supabase.from('users').update({ password_hash: seed.passwordHash }).eq('email', dbUser.email);
             }
-            await supabase.from('users').update({ role: 'user' }).eq('role', 'admin').neq('email', seededEmails[0]);
-            const seededHashFixes = u.map(normalizeUser).filter(dbUser => seededEmails.includes(dbUser.email?.toLowerCase()) && !dbUser.passwordHash);
-            for (const dbUser of seededHashFixes) {
-              const seed = seeded.find(s => s.email === dbUser.email.toLowerCase());
-              if (seed?.passwordHash) {
-                await supabase.from('users').update({ password_hash: seed.passwordHash }).eq('email', dbUser.email);
-              }
+          }
+          setUsers(prev => prev.map(u => {
+            const email = u.email?.toLowerCase();
+            if (email && email !== seededEmails[0] && u.role === 'admin') {
+              return { ...u, role: 'user' };
             }
-            setUsers(prev => prev.map(u => {
-              const email = u.email?.toLowerCase();
-              if (email && email !== seededEmails[0] && u.role === 'admin') {
-                return { ...u, role: 'user' };
-              }
-              if (email && seededEmails.includes(email)) {
-                const seed = seedByEmail.get(email);
-                return { ...u, role: seed?.role || u.role, status: seed?.status || u.status };
-              }
-              return u;
-            }));
+            if (email && seededEmails.includes(email)) {
+              const seed = seedByEmail.get(email);
+              return { ...u, role: seed?.role || u.role, status: seed?.status || u.status };
+            }
+            return u;
+          }));
 
-            const missingSeedUsers = seeded.filter(su => !existingEmails.includes(su.email));
-            if (missingSeedUsers.length) {
-              await supabase.from('users').insert(missingSeedUsers.map(u => ({
-                id: u.id, name: u.name, email: u.email, role: u.role, status: u.status,
+          const missingSeedUsers = seeded.filter(su => !existingEmails.includes(su.email));
+          if (missingSeedUsers.length) {
+            const { data: insertedUsers, error: insertSeedError } = await supabase
+              .from('users')
+              .insert(missingSeedUsers.map(u => ({
+                name: u.name,
+                email: u.email,
+                role: u.role,
+                status: u.status,
                 password_hash: u.passwordHash,
-              })));
+              })))
+              .select('*');
+
+            if (insertSeedError) throw insertSeedError;
+
+            if (insertedUsers?.length) {
               setUsers(prev => {
-                const have = prev.map(x => x.email.toLowerCase());
-                const toAdd = missingSeedUsers.filter(su => !have.includes(su.email));
-                return [...prev, ...toAdd];
+                const merged = [...prev];
+                insertedUsers.map(normalizeUser).forEach(dbUser => {
+                  const idx = merged.findIndex(x => x.email.toLowerCase() === dbUser.email.toLowerCase());
+                  if (idx > -1) merged[idx] = { ...merged[idx], ...dbUser };
+                  else merged.push(dbUser);
+                });
+                return merged;
               });
             }
-          } catch (err) {
-            console.warn("Unable to persist seeded admins to Supabase:", err);
           }
+        } catch (err) {
+          console.warn("Unable to persist seeded admins to Supabase:", err);
         }
 
         if (!it || it.length === 0) {
@@ -1263,7 +1280,16 @@ const handleApproveUser = async (userId) => {
     });
 
     if (error) {
-      throw error;
+      let details = error.message || "Unable to complete privileged action.";
+      if (typeof error.context?.json === "function") {
+        try {
+          const parsed = await error.context.json();
+          if (parsed?.error) details = parsed.error;
+        } catch {
+          // Keep default error message when response body is not valid JSON.
+        }
+      }
+      throw new Error(details);
     }
 
     if (data?.error) {
