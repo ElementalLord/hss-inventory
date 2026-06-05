@@ -2704,7 +2704,7 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
                   ) : (
                     <div className="card">
                       <div className="card-header">
-                        <h3>⚠️ Overdue ({overdue.length}) · ⏳ Due Soon ({dueSoon.length})</h3>
+                        <h3>⚠️ Overdue({overdue.length}) · ⏳ Due Soon ({dueSoon.length})</h3>
                         <button className="btn btn-sm btn-primary"
                           onClick={() => showToast(`Reminder emails sent to ${[...new Set(overdue.map(t => t.checkedOutByName))].join(", ")}!`, "success")}>
                           📧 Send All Reminders
