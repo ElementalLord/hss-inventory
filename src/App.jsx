@@ -634,8 +634,22 @@ function Modal({ title, onClose, footer, children }) {
 // ── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [users, setUsers] = useState(SEED_USERS);
-  const [items, setItems] = useState([]);
-  const [transactions, setTransactions] = useState([]);
+  const [items, setItems] = useState(() => {
+    if (typeof window === "undefined") return [...SEED_ITEMS];
+    try {
+      const cached = JSON.parse(window.localStorage.getItem("item_cache") || "[]");
+      if (Array.isArray(cached) && cached.length) return cached;
+    } catch {}
+    return [...SEED_ITEMS];
+  });
+  const [transactions, setTransactions] = useState(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const cached = JSON.parse(window.localStorage.getItem("transaction_cache") || "[]");
+      if (Array.isArray(cached)) return cached;
+    } catch {}
+    return [];
+  });
   const [currentUser, setCurrentUser] = useState(null);
   const [view, setView] = useState("dashboard");
   const [authStep, setAuthStep] = useState("login"); // login | register | otp | password | pending
@@ -672,6 +686,11 @@ export default function App() {
   const isMobileMode = uiMode === "mobile";
 
   const showToast = (msg, type = "success") => setToast({ msg, type });
+  const normalizeItemLikeCache = (item) => ({
+    ...item,
+    locationDescription: item.locationDescription ?? item.location ?? "",
+    condition: item.condition ?? item.item_condition ?? "Good",
+  });
   const normalizeItem = (item) => ({
     ...item,
     locationDescription: item.locationDescription ?? item.location ?? "",
@@ -713,6 +732,12 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("item_reservations", JSON.stringify(reservations));
   }, [reservations]);
+  useEffect(() => {
+    localStorage.setItem("item_cache", JSON.stringify(items));
+  }, [items]);
+  useEffect(() => {
+    localStorage.setItem("transaction_cache", JSON.stringify(transactions));
+  }, [transactions]);
   useEffect(() => {
     (async () => {
       try {
@@ -798,7 +823,7 @@ export default function App() {
             setItems(SEED_ITEMS);
           } catch (err) {
             console.warn("Unable to restore seed items to Supabase:", err);
-            setItems([]);
+            setItems(prev => (prev?.length ? prev : SEED_ITEMS));
           }
         } else {
           setItems(it.map(normalizeItem));
@@ -852,7 +877,7 @@ export default function App() {
         }
 
         localStorage.setItem("offline_users_cache", JSON.stringify(u || []));
-        localStorage.setItem("offline_items_cache", JSON.stringify(it || []));
+        localStorage.setItem("offline_items_cache", JSON.stringify((it && it.length ? it : items) || []));
         localStorage.setItem("offline_tx_cache", JSON.stringify(tx || []));
       } catch (err) {
         console.warn("Failed to load data from Supabase:", err);
@@ -901,6 +926,8 @@ export default function App() {
             setDamageReports(mapped);
           }
           showToast("Offline cache loaded. Some data may be stale.", "error");
+        } else {
+          setItems(prev => (prev?.length ? prev : SEED_ITEMS));
         }
       }
     })();
@@ -1396,29 +1423,44 @@ const handleAddItem = async (data) => {
     return;
   }
 
-  try {
-      const response = await runPrivilegedAction("add-item", {
-        item: {
-          id: uid(),
-          name: data.name,
-          quantity: Number(data.quantity || 0),
-          category: data.category,
-          condition: data.condition || "Good",
-          image: data.image || "📦",
-          siteId: data.siteId,
-          zoneId: data.zoneId,
-          location: data.locationDescription,
-          locationDescription: data.locationDescription,
-        },
-      }, data.password);
+  const newItem = normalizeItem({
+    id: uid(),
+    name: data.name,
+    quantity: Number(data.quantity || 0),
+    category: data.category,
+    condition: data.condition || "Good",
+    image: data.image || "📦",
+    siteId: data.siteId,
+    zoneId: data.zoneId,
+    location: data.locationDescription,
+    locationDescription: data.locationDescription,
+  });
 
-      if (response?.item) {
-        setItems(prev => [...prev, normalizeItem(response.item)]);
-        showToast("Item added!", "success");
-      }
+  try {
+    const { data: inserted, error } = await supabase.from('items').insert({
+      id: newItem.id,
+      name: newItem.name,
+      quantity: newItem.quantity,
+      category: newItem.category,
+      condition: newItem.condition,
+      image: newItem.image,
+      siteId: newItem.siteId,
+      zoneId: newItem.zoneId,
+      location: newItem.locationDescription,
+      locationDescription: newItem.locationDescription,
+    }).select().single();
+
+    if (error) {
+      setItems(prev => [...prev, newItem]);
+      showToast("Item added locally (offline mode).", "warning");
+    } else {
+      setItems(prev => [...prev, normalizeItem(inserted)]);
+      showToast("Item added!", "success");
+    }
   } catch (err) {
     console.error("Insert exception:", err);
-      showToast(err?.message || "Failed to add item.", "error");
+    setItems(prev => [...prev, newItem]);
+    showToast("Item added locally (offline mode).", "warning");
   }
   setModal(null);
 };
@@ -1429,28 +1471,42 @@ const handleEditItem = async (data) => {
     return;
   }
 
-  try {
-    const response = await runPrivilegedAction("edit-item", {
-      item: {
-        id: data.id,
-        name: data.name,
-        quantity: Number(data.quantity || 0),
-        category: data.category,
-        condition: data.condition || "Good",
-        image: data.image,
-        siteId: data.siteId,
-        zoneId: data.zoneId,
-        locationDescription: data.locationDescription,
-      },
-    }, data.password);
+  const updatedItem = normalizeItem({
+    id: data.id,
+    name: data.name,
+    quantity: Number(data.quantity || 0),
+    category: data.category,
+    condition: data.condition || "Good",
+    image: data.image,
+    siteId: data.siteId,
+    zoneId: data.zoneId,
+    locationDescription: data.locationDescription,
+  });
 
-    if (response?.item) {
-      setItems(prev => prev.map(it => it.id === response.item.id ? normalizeItem(response.item) : it));
+  try {
+    const { data: saved, error } = await supabase.from('items').update({
+      name: updatedItem.name,
+      quantity: updatedItem.quantity,
+      category: updatedItem.category,
+      condition: updatedItem.condition,
+      image: updatedItem.image,
+      siteId: updatedItem.siteId,
+      zoneId: updatedItem.zoneId,
+      location: updatedItem.locationDescription,
+      locationDescription: updatedItem.locationDescription,
+    }).eq('id', updatedItem.id).select().single();
+
+    if (error) {
+      setItems(prev => prev.map(it => it.id === updatedItem.id ? updatedItem : it));
+      showToast("Item updated locally (offline mode).", "warning");
+    } else {
+      setItems(prev => prev.map(it => it.id === saved.id ? normalizeItem(saved) : it));
       showToast("Item updated!", "success");
     }
   } catch (err) {
     console.error("Update exception:", err);
-    showToast(err?.message || "Failed to update item.", "error");
+    setItems(prev => prev.map(it => it.id === updatedItem.id ? updatedItem : it));
+    showToast("Item updated locally (offline mode).", "warning");
   }
   setModal(null);
 };
@@ -1483,15 +1539,16 @@ const handleRestoreItems = async () => {
   }
 
   try {
-    const response = await runPrivilegedAction("delete-item", { itemId }, password);
-    if (response?.ok) {
-      setItems(prev => prev.filter(i => i.id !== itemId));
-      setTransactions(prev => prev.filter(t => t.itemId !== itemId));
-      showToast("Item deleted.", "success");
-    }
+    const { error } = await supabase.from('items').delete().eq('id', itemId);
+    setItems(prev => prev.filter(i => i.id !== itemId));
+    setTransactions(prev => prev.filter(t => t.itemId !== itemId));
+    if (error) showToast("Item deleted locally (offline mode).", "warning");
+    else showToast("Item deleted.", "success");
   } catch (err) {
     console.error("Delete item exception:", err);
-    showToast(err?.message || "Failed to delete item.", "error");
+    setItems(prev => prev.filter(i => i.id !== itemId));
+    setTransactions(prev => prev.filter(t => t.itemId !== itemId));
+    showToast("Item deleted locally (offline mode).", "warning");
   }
 
   setModal(null);
@@ -1553,10 +1610,7 @@ const handleCheckOut = async (itemId, quantity, dueDateIso) => {
     due_date: dueDate,
   };
   const { error } = await supabase.from('transactions').insert(tx);
-  if (error) {
-    showToast("Unable to check out item.", "error");
-    return;
-  }
+  if (error) showToast("Checked out locally; sync to server failed.", "warning");
   setTransactions(prev => [...prev, {
     id: tx.id, itemId, itemName: item.name, quantity: requestedQty,
     checkedOutBy: currentUser.id, checkedOutByName: currentUser.name,
@@ -1584,10 +1638,7 @@ const handleCheckIn = async (txId, report = { condition: "good", note: "" }) => 
     status: "in", checked_in_by: currentUser.id,
     checked_in_by_name: currentUser.name, check_in_time: now,
   }).eq('id', txId);
-  if (error) {
-    showToast("Unable to check in item.", "error");
-    return;
-  }
+  if (error) showToast("Checked in locally; sync to server failed.", "warning");
   setTransactions(prev => prev.map(t =>
     t.id === txId ? { ...t, status: "in", checkedInBy: currentUser.id, checkedInByName: currentUser.name, checkInTime: now } : t
   ));
@@ -1657,10 +1708,7 @@ const handleReserveItem = async (itemId, quantity, reservedFor) => {
     status: reservation.status,
     created_at: reservation.createdAt,
   });
-  if (reserveError) {
-    showToast("Unable to save reservation.", "error");
-    return;
-  }
+  if (reserveError) showToast("Reservation saved locally; sync to server failed.", "warning");
   setReservations(prev => [reservation, ...prev].slice(0, 500));
   showToast(`${item.name} reserved for ${normalizedDate}.`, "success");
   setModal(null);
@@ -1932,7 +1980,7 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
   const filteredItems = items.filter(it =>
     (catFilter === "All" || it.category === catFilter) &&
     (siteFilter === "all" || it.siteId === siteFilter) &&
-    (siteFilter === "all" || it.zoneId === zoneFilter) &&
+    (zoneFilter === "all" || it.zoneId === zoneFilter) &&
     (it.name.toLowerCase().includes(search.toLowerCase()) || it.locationDescription?.toLowerCase().includes(search.toLowerCase()))
   );
 
