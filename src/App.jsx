@@ -2348,7 +2348,10 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
                         </div>
                         {available < 1 && closestReturn && (
                           <div className="info-box" style={{ marginTop: 12, marginBottom: 0, padding: "10px 12px" }}>
-                            Closest return: <strong>{closestReturn.checkedOutByName}</strong> by <strong>{fmtDate(closestReturn.dueDateIso)}</strong> (qty {closestReturn.quantity}).
+                            Next return by: <strong>{fmtDate(closestReturn.dueDateIso)}</strong>
+                            <div style={{ marginTop: 4, fontSize: 12, color: "var(--text-muted)" }}>
+                              Checked out by <strong>{closestReturn.checkedOutByName}</strong> · qty {closestReturn.quantity}
+                            </div>
                           </div>
                         )}
                         <div className="item-card-actions">
@@ -3239,6 +3242,9 @@ function CheckOutModal({ item, transactions, reservations, user, onClose, onConf
       footer={<><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-secondary" onClick={() => onOpenReserve(item, safeQty || 1)} disabled={invalidQty || available < 1}>Reserve Instead</button><button className="btn btn-primary" onClick={() => { if (!invalidQty && !invalidReturnDate) { const dueDateIso = new Date(`${returnDate}T23:59:59`).toISOString(); onConfirm(item.id, safeQty, dueDateIso); } }} disabled={invalidQty || invalidReturnDate}>Confirm Check Out</button></>}>
       <div className="info-box">
         <strong>{user.name}</strong> will be checking out this item on {new Date().toLocaleString("en-US", { month: "long", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}.
+      </div>
+      <div className="info-box" style={{ background: "var(--saffron-pale)", borderColor: "rgba(232,112,42,0.25)" }}>
+        Please choose a <strong>Return By Date</strong>. This date is saved with the checkout and shown to users who reserve this item.
       </div>
       {nextReservation && returnByDate && (
         <div className="info-box" style={{ background: "#FFF8E0", borderColor: "#F4DE9B", color: "#7A5A00" }}>
