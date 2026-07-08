@@ -80,43 +80,6 @@ const hashPassword = async (password) => {
   return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, "0")).join("");
 };
 
-const normalizeConditionBreakdown = (value) => {
-  if (!value) return [];
-
-  let rows = value;
-  if (typeof rows === "string") {
-    try {
-      rows = JSON.parse(rows);
-    } catch {
-      return [];
-    }
-  }
-
-  if (!Array.isArray(rows)) return [];
-
-  return rows
-    .map((row) => ({
-      condition: String(row?.condition ?? row?.label ?? "").trim(),
-      quantity: Number(row?.quantity || 0),
-    }))
-    .filter((row) => row.condition && row.quantity > 0);
-};
-
-const getItemConditionLabel = (item) => {
-  const condition = item?.condition ?? item?.item_condition ?? "Good";
-  const breakdown = normalizeConditionBreakdown(item?.conditionBreakdown ?? item?.condition_breakdown);
-
-  if (!breakdown.length) return condition;
-  if (breakdown.length === 1) return breakdown[0].condition;
-  return "Mixed";
-};
-
-const getItemConditionDetail = (item) => {
-  const breakdown = normalizeConditionBreakdown(item?.conditionBreakdown ?? item?.condition_breakdown);
-  if (!breakdown.length) return "";
-  return breakdown.map((row) => `${row.condition} (${row.quantity})`).join(" · ");
-};
-
 // ── Styles ───────────────────────────────────────────────────────────────────
 const css = `
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@300;400;500;600&family=Great+Vibes&display=swap');
@@ -727,13 +690,11 @@ export default function App() {
     ...item,
     locationDescription: item.locationDescription ?? item.location ?? "",
     condition: item.condition ?? item.item_condition ?? "Good",
-    conditionBreakdown: normalizeConditionBreakdown(item.conditionBreakdown ?? item.condition_breakdown),
   });
   const normalizeItem = (item) => ({
     ...item,
     locationDescription: item.locationDescription ?? item.location ?? "",
     condition: item.condition ?? item.item_condition ?? "Good",
-    conditionBreakdown: normalizeConditionBreakdown(item.conditionBreakdown ?? item.condition_breakdown),
   });
   const normalizeUser = (user) => ({
     ...user,
@@ -853,7 +814,6 @@ export default function App() {
               location: i.locationDescription,
               locationDescription: i.locationDescription,
               condition: i.condition || "Good",
-              condition_breakdown: i.conditionBreakdown || [],
               image: i.image,
             })));
             setItems(SEED_ITEMS);
@@ -1480,7 +1440,6 @@ const handleAddItem = async (data) => {
     quantity: Number(data.quantity || 0),
     category: data.category,
     condition: data.condition || "Good",
-    conditionBreakdown: normalizeConditionBreakdown(data.conditionBreakdown),
     image: data.image || "📦",
     siteId: data.siteId,
     zoneId: data.zoneId,
@@ -1495,7 +1454,6 @@ const handleAddItem = async (data) => {
       quantity: newItem.quantity,
       category: newItem.category,
       condition: newItem.condition,
-      condition_breakdown: newItem.conditionBreakdown,
       image: newItem.image,
       siteId: newItem.siteId,
       zoneId: newItem.zoneId,
@@ -1530,7 +1488,6 @@ const handleEditItem = async (data) => {
     quantity: Number(data.quantity || 0),
     category: data.category,
     condition: data.condition || "Good",
-    conditionBreakdown: normalizeConditionBreakdown(data.conditionBreakdown),
     image: data.image,
     siteId: data.siteId,
     zoneId: data.zoneId,
@@ -1543,7 +1500,6 @@ const handleEditItem = async (data) => {
       quantity: updatedItem.quantity,
       category: updatedItem.category,
       condition: updatedItem.condition,
-      condition_breakdown: updatedItem.conditionBreakdown,
       image: updatedItem.image,
       siteId: updatedItem.siteId,
       zoneId: updatedItem.zoneId,
@@ -2355,8 +2311,6 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
                     const available = Math.max(0, item.quantity - totalOut);
                     const closestReturn = closestReturnByItem[item.id];
                     const zone = item.siteId && item.zoneId ? SITES.find(s => s.id === item.siteId)?.zones.find(z => z.id === item.zoneId) : null;
-                    const conditionLabel = getItemConditionLabel(item);
-                    const conditionDetail = getItemConditionDetail(item);
                     return (
                       <div key={item.id} className="item-card">
                         {isImageSource(item.image) ? (
@@ -2372,13 +2326,8 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
                         <div className="item-card-name">{item.name}</div>
                         <div className="item-card-meta">
                           <span className="badge badge-cat">{item.category}</span>
-                          <span className="tag">Condition: {conditionLabel}</span>
+                          <span className="tag">Condition: {item.condition || "Good"}</span>
                         </div>
-                        {conditionDetail && (
-                          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12, lineHeight: 1.4 }}>
-                            Breakdown: {conditionDetail}
-                          </div>
-                        )}
                         <div style={{ fontSize: 13, color: "var(--text)", marginBottom: 14, lineHeight: 1.4, fontWeight: 500 }}>
                           <div><strong>📍 {zone?.name || 'Location not set'}</strong></div>
                           <div style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 400 }}>{item.locationDescription || 'No description available'}</div>
@@ -2515,8 +2464,6 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
                     const available = Math.max(0, item.quantity - totalOut);
                     const closestReturn = closestReturnByItem[item.id];
                     const zone = SITES.find(s => s.id === item.siteId)?.zones.find(z => z.id === item.zoneId);
-                    const conditionLabel = getItemConditionLabel(item);
-                    const conditionDetail = getItemConditionDetail(item);
                     return (
                       <div key={item.id} className={`item-card ${available < 1 ? "disabled" : ""}`} style={available < 1 ? { opacity: 0.5 } : {}}>
                         {isImageSource(item.image) ? (
@@ -2532,13 +2479,8 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
                         <div className="item-card-name">{item.name}</div>
                         <div className="item-card-meta">
                           <span className="badge badge-cat">{item.category}</span>
-                          <span className="tag">Condition: {conditionLabel}</span>
+                          <span className="tag">Condition: {item.condition || "Good"}</span>
                         </div>
-                        {conditionDetail && (
-                          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12, lineHeight: 1.4 }}>
-                            Breakdown: {conditionDetail}
-                          </div>
-                        )}
                         <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14, lineHeight: 1.4 }}>
                           <div><strong>📍 {zone?.name}</strong></div>
                           <div>{item.locationDescription}</div>
@@ -3063,17 +3005,11 @@ function PrivilegedUserActionModal({ modal, onClose, onConfirm }) {
 // ── Add Item Modal ────────────────────────────────────────────────────────────
 function AddItemModal({ onClose, onSave }) {
   const [form, setForm] = useState({ name: "", quantity: 1, category: "Ghosh", condition: "Good", siteId: SITES[0].id, zoneId: SITES[0].zones[0].id, locationDescription: "", image: "📦" });
-  const [conditionMode, setConditionMode] = useState("single");
-  const [conditionBreakdown, setConditionBreakdown] = useState([{ condition: "Good", quantity: 1 }]);
   const [privilegedPassword, setPrivilegedPassword] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showZoom, setShowZoom] = useState(false);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const currentSite = SITES.find(s => s.id === form.siteId);
-  const normalizedQuantity = Number(form.quantity || 0);
-  const normalizedBreakdown = normalizeConditionBreakdown(conditionBreakdown);
-  const breakdownTotal = normalizedBreakdown.reduce((sum, row) => sum + row.quantity, 0);
-  const splitIsValid = conditionMode !== "split" || (normalizedBreakdown.length > 0 && breakdownTotal === normalizedQuantity);
   const handleImageFile = (file) => {
     if (!file) return;
     const reader = new FileReader();
@@ -3081,41 +3017,9 @@ function AddItemModal({ onClose, onSave }) {
     reader.readAsDataURL(file);
   };
 
-  useEffect(() => {
-    if (conditionMode !== "split") return;
-    setConditionBreakdown(rows => {
-      if (rows.length !== 1) return rows;
-      const targetQty = Math.max(1, Number(form.quantity) || 1);
-      if (rows[0].quantity === targetQty) return rows;
-      return [{ ...rows[0], quantity: targetQty }];
-    });
-  }, [conditionMode, form.quantity]);
-
-  const updateConditionRow = (index, key, value) => {
-    setConditionBreakdown(rows => rows.map((row, rowIndex) => rowIndex === index ? { ...row, [key]: value } : row));
-  };
-
-  const addConditionRow = () => {
-    setConditionBreakdown(rows => [...rows, { condition: "Good", quantity: 1 }]);
-  };
-
-  const removeConditionRow = (index) => {
-    setConditionBreakdown(rows => rows.filter((_, rowIndex) => rowIndex !== index));
-  };
-
-  const savePayload = () => {
-    if (!form.name || !form.locationDescription || !form.image || !privilegedPassword || !splitIsValid) return;
-    onSave({
-      ...form,
-      quantity: normalizedQuantity,
-      conditionBreakdown: conditionMode === "split" ? normalizedBreakdown : [],
-      password: privilegedPassword,
-    });
-  };
-
   return (
     <Modal title="Add Inventory Item" onClose={onClose}
-      footer={<><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={savePayload} disabled={!form.name || !form.locationDescription || !form.image || !privilegedPassword || !splitIsValid}>Add Item</button></>}>
+      footer={<><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={() => { if (form.name && form.locationDescription && form.image && privilegedPassword) onSave({ ...form, quantity: +form.quantity, password: privilegedPassword }); }} disabled={!form.name || !form.locationDescription || !form.image || !privilegedPassword}>Add Item</button></>}>
       <div className="field"><label>Item Name</label><input placeholder="e.g. Dhol" value={form.name} onChange={e => set("name", e.target.value)} /></div>
       
       <div className="field">
@@ -3167,43 +3071,10 @@ function AddItemModal({ onClose, onSave }) {
           </select>
         </div>
       </div>
-      <div className="field">
-        <label>Condition</label>
-        <button className="btn btn-sm btn-ghost" type="button" onClick={() => {
-          if (conditionMode === "single") {
-            setConditionMode("split");
-            setConditionBreakdown([{ condition: form.condition || "Good", quantity: Math.max(1, Number(form.quantity) || 1) }]);
-          } else {
-            setConditionMode("single");
-          }
-        }} style={{ marginBottom: 12 }}>
-          {conditionMode === "single" ? "Split by item condition" : "Use one condition for all"}
-        </button>
-        {conditionMode === "single" ? (
-          <select value={form.condition} onChange={e => set("condition", e.target.value)}>
-            {ITEM_CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-        ) : (
-          <>
-            <div style={{ display: "grid", gap: 10 }}>
-              {conditionBreakdown.map((row, index) => (
-                <div key={index} style={{ display: "grid", gridTemplateColumns: "1fr 120px auto", gap: 8, alignItems: "center" }}>
-                  <select value={row.condition} onChange={e => updateConditionRow(index, "condition", e.target.value)}>
-                    {ITEM_CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                  <input type="number" min={1} value={row.quantity} onChange={e => updateConditionRow(index, "quantity", Math.max(1, Number(e.target.value) || 1))} />
-                  <button className="btn btn-sm btn-ghost" type="button" onClick={() => removeConditionRow(index)} disabled={conditionBreakdown.length === 1}>Remove</button>
-                </div>
-              ))}
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: 10 }}>
-              <button className="btn btn-sm btn-secondary" type="button" onClick={addConditionRow}>+ Add split row</button>
-              <div style={{ fontSize: 12, color: splitIsValid ? "var(--text-muted)" : "var(--danger)", textAlign: "right" }}>
-                Split total: {breakdownTotal} / {normalizedQuantity || 0}
-              </div>
-            </div>
-          </>
-        )}
+      <div className="field"><label>Condition</label>
+        <select value={form.condition} onChange={e => set("condition", e.target.value)}>
+          {ITEM_CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
       </div>
       <div className="row-2">
         <div className="field"><label>Vibhag/Site</label>
@@ -3233,7 +3104,6 @@ function AddItemModal({ onClose, onSave }) {
 
 // ── Edit Item Modal ───────────────────────────────────────────────────────────
 function EditItemModal({ item, onClose, onSave, onDelete }) {
-  const existingBreakdown = normalizeConditionBreakdown(item.conditionBreakdown ?? item.condition_breakdown);
   const [form, setForm] = useState({ 
     ...item, 
     condition: item.condition || "Good",
@@ -3241,17 +3111,11 @@ function EditItemModal({ item, onClose, onSave, onDelete }) {
     zoneId: item.zoneId || SITES[0].zones[0]?.id || "",
     locationDescription: item.locationDescription || ""
   });
-  const [conditionMode, setConditionMode] = useState(existingBreakdown.length > 0 ? "split" : "single");
-  const [conditionBreakdown, setConditionBreakdown] = useState(existingBreakdown.length > 0 ? existingBreakdown : [{ condition: item.condition || "Good", quantity: Math.max(1, Number(item.quantity) || 1) }]);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showZoom, setShowZoom] = useState(false);
   const [privilegedPassword, setPrivilegedPassword] = useState("");
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const currentSite = SITES.find(s => s.id === form.siteId);
-  const normalizedQuantity = Number(form.quantity || 0);
-  const normalizedBreakdown = normalizeConditionBreakdown(conditionBreakdown);
-  const breakdownTotal = normalizedBreakdown.reduce((sum, row) => sum + row.quantity, 0);
-  const splitIsValid = conditionMode !== "split" || (normalizedBreakdown.length > 0 && breakdownTotal === normalizedQuantity);
   const handleImageFile = (file) => {
     if (!file) return;
     const reader = new FileReader();
@@ -3259,41 +3123,9 @@ function EditItemModal({ item, onClose, onSave, onDelete }) {
     reader.readAsDataURL(file);
   };
 
-  useEffect(() => {
-    if (conditionMode !== "split") return;
-    setConditionBreakdown(rows => {
-      if (rows.length !== 1) return rows;
-      const targetQty = Math.max(1, Number(form.quantity) || 1);
-      if (rows[0].quantity === targetQty) return rows;
-      return [{ ...rows[0], quantity: targetQty }];
-    });
-  }, [conditionMode, form.quantity]);
-
-  const updateConditionRow = (index, key, value) => {
-    setConditionBreakdown(rows => rows.map((row, rowIndex) => rowIndex === index ? { ...row, [key]: value } : row));
-  };
-
-  const addConditionRow = () => {
-    setConditionBreakdown(rows => [...rows, { condition: "Good", quantity: 1 }]);
-  };
-
-  const removeConditionRow = (index) => {
-    setConditionBreakdown(rows => rows.filter((_, rowIndex) => rowIndex !== index));
-  };
-
-  const savePayload = () => {
-    if (!privilegedPassword || !splitIsValid) return;
-    onSave({
-      ...form,
-      quantity: normalizedQuantity,
-      conditionBreakdown: conditionMode === "split" ? normalizedBreakdown : [],
-      password: privilegedPassword,
-    });
-  };
-
   return (
     <Modal title="Edit Item" onClose={onClose}
-      footer={<><button className="btn btn-danger btn-sm" onClick={() => onDelete(item.id, privilegedPassword)} disabled={!privilegedPassword}>Delete</button><div style={{ flex: 1 }} /><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={savePayload} disabled={!privilegedPassword || !splitIsValid}>Save Changes</button></>}>
+      footer={<><button className="btn btn-danger btn-sm" onClick={() => onDelete(item.id, privilegedPassword)} disabled={!privilegedPassword}>Delete</button><div style={{ flex: 1 }} /><button className="btn btn-ghost" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={() => { if (privilegedPassword) onSave({ ...form, quantity: +form.quantity, password: privilegedPassword }); }} disabled={!privilegedPassword}>Save Changes</button></>}>
       <div className="field"><label>Item Name</label><input value={form.name} onChange={e => set("name", e.target.value)} /></div>
       
       <div className="field">
@@ -3345,43 +3177,10 @@ function EditItemModal({ item, onClose, onSave, onDelete }) {
           </select>
         </div>
       </div>
-      <div className="field">
-        <label>Condition</label>
-        <button className="btn btn-sm btn-ghost" type="button" onClick={() => {
-          if (conditionMode === "single") {
-            setConditionMode("split");
-            setConditionBreakdown([{ condition: form.condition || "Good", quantity: Math.max(1, Number(form.quantity) || 1) }]);
-          } else {
-            setConditionMode("single");
-          }
-        }} style={{ marginBottom: 12 }}>
-          {conditionMode === "single" ? "Split by item condition" : "Use one condition for all"}
-        </button>
-        {conditionMode === "single" ? (
-          <select value={form.condition} onChange={e => set("condition", e.target.value)}>
-            {ITEM_CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-        ) : (
-          <>
-            <div style={{ display: "grid", gap: 10 }}>
-              {conditionBreakdown.map((row, index) => (
-                <div key={index} style={{ display: "grid", gridTemplateColumns: "1fr 120px auto", gap: 8, alignItems: "center" }}>
-                  <select value={row.condition} onChange={e => updateConditionRow(index, "condition", e.target.value)}>
-                    {ITEM_CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                  <input type="number" min={1} value={row.quantity} onChange={e => updateConditionRow(index, "quantity", Math.max(1, Number(e.target.value) || 1))} />
-                  <button className="btn btn-sm btn-ghost" type="button" onClick={() => removeConditionRow(index)} disabled={conditionBreakdown.length === 1}>Remove</button>
-                </div>
-              ))}
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: 10 }}>
-              <button className="btn btn-sm btn-secondary" type="button" onClick={addConditionRow}>+ Add split row</button>
-              <div style={{ fontSize: 12, color: splitIsValid ? "var(--text-muted)" : "var(--danger)", textAlign: "right" }}>
-                Split total: {breakdownTotal} / {normalizedQuantity || 0}
-              </div>
-            </div>
-          </>
-        )}
+      <div className="field"><label>Condition</label>
+        <select value={form.condition} onChange={e => set("condition", e.target.value)}>
+          {ITEM_CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
       </div>
       <div className="row-2">
         <div className="field"><label>Vibhag/Site</label>
