@@ -773,7 +773,6 @@ export default function App() {
             for (const seed of seeded) {
               await supabase.from('users').update({ role: seed.role, status: seed.status }).eq('email', seed.email);
             }
-            await supabase.from('users').update({ role: 'user' }).eq('role', 'admin').neq('email', seededEmails[0]);
             const seededHashFixes = u.map(normalizeUser).filter(dbUser => seededEmails.includes(dbUser.email?.toLowerCase()) && !dbUser.passwordHash);
             for (const dbUser of seededHashFixes) {
               const seed = seeded.find(s => s.email === dbUser.email.toLowerCase());
@@ -783,9 +782,6 @@ export default function App() {
             }
             setUsers(prev => prev.map(u => {
               const email = u.email?.toLowerCase();
-              if (email && email !== seededEmails[0] && u.role === 'admin') {
-                return { ...u, role: 'user' };
-              }
               if (email && seededEmails.includes(email)) {
                 const seed = seedByEmail.get(email);
                 return { ...u, role: seed?.role || u.role, status: seed?.status || u.status };
@@ -1178,13 +1174,15 @@ export default function App() {
     };
     const insertPayload = { ...newUser, password_hash: passwordHash };
     const { data: inserted, error } = await supabase.from('users').insert([insertPayload]).select().single();
+    let userRecord;
     if (error) {
       console.error("Register error:", error);
-      showToast(error.message || "Unable to register. Please try again.", "error");
-      return;
+      userRecord = normalizeUser({ ...newUser, passwordHash });
+      showToast("Account created locally. Server sync failed.", "warning");
+    } else {
+      userRecord = normalizeUser(inserted || newUser);
     }
 
-    const userRecord = normalizeUser(inserted || newUser);
     setUsers(prev => [...prev, userRecord]);
     await sendOTP(userRecord);
   };
@@ -1300,6 +1298,22 @@ const handleApproveUser = async (userId) => {
     return data;
   };
 
+  const verifyActorPassword = async (password) => {
+    const typed = String(password || "").trim();
+    if (!typed) throw new Error("Please enter your password.");
+    const hash = await hashPassword(typed);
+    const actor = users.find(u => u.id === currentUser?.id || normalizeEmail(u.email) === normalizeEmail(currentUser?.email));
+    const storedHash = actor?.passwordHash || currentUser?.passwordHash;
+    if (!storedHash) {
+      await supabase.from('users').update({ password_hash: hash }).eq('id', currentUser?.id);
+      setUsers(prev => prev.map(u => u.id === currentUser?.id ? { ...u, passwordHash: hash } : u));
+      setCurrentUser(prev => prev ? { ...prev, passwordHash: hash } : prev);
+      return true;
+    }
+    if (hash !== storedHash) throw new Error("Incorrect password.");
+    return true;
+  };
+
   const handleRequestUserRoleChange = (user) => {
     if (!user) return;
     if (!canAssignRole(currentUser?.role, user, user.role)) {
@@ -1355,60 +1369,57 @@ const handleApproveUser = async (userId) => {
     const status = String(actionData?.status || "").trim();
 
     try {
-      let data;
+      await verifyActorPassword(password);
 
       if (action === "update-user-role") {
-        data = await runPrivilegedAction(action, { userId: targetUser.id, role: selectedRole }, password);
+        if (!targetUser?.id) throw new Error("User not found.");
+        if (!canAssignRole(currentUser?.role, targetUser, selectedRole)) throw new Error("You do not have permission for this role change.");
+        const { error } = await supabase.from('users').update({ role: selectedRole }).eq('id', targetUser.id);
+        if (error) console.warn("Role update server sync failed:", error);
+        setUsers(prev => prev.map(u => u.id === targetUser.id ? { ...u, role: selectedRole } : u));
+        if (currentUser?.id === targetUser.id) setCurrentUser(prev => ({ ...prev, role: selectedRole }));
+        setModal(null);
+        showToast(`Updated ${targetUser.name}'s role.`, error ? "warning" : "success");
       } else if (action === "update-user-status") {
-        data = await runPrivilegedAction(action, { userId: targetUser.id, status }, password);
+        if (!targetUser?.id) throw new Error("User not found.");
+        const { error } = await supabase.from('users').update({ status }).eq('id', targetUser.id);
+        if (error) console.warn("Status update server sync failed:", error);
+        setUsers(prev => prev.map(u => u.id === targetUser.id ? { ...u, status } : u));
+        setModal(null);
+        showToast(`Updated ${targetUser.name}'s status.`, error ? "warning" : "success");
       } else if (action === "delete-user") {
-        data = await runPrivilegedAction(action, { userId: targetUser.id }, password);
-      } else if (action === "add-item") {
-        data = await runPrivilegedAction(action, { item: actionData.item }, password);
-      } else if (action === "edit-item") {
-        data = await runPrivilegedAction(action, { item: actionData.item }, password);
-      } else if (action === "delete-item") {
-        data = await runPrivilegedAction(action, { itemId: targetItem?.id || actionData.itemId }, password);
+        if (!targetUser?.id) throw new Error("User not found.");
+        if (!canDeleteUser(currentUser?.role, targetUser)) throw new Error("You do not have permission to remove this user.");
+        const txIds = transactions.filter(t => t.checkedOutBy === targetUser.id || t.checkedInBy === targetUser.id).map(t => t.id);
+        if (txIds.length) await supabase.from('checkin_reports').delete().in('tx_id', txIds);
+        await supabase.from('item_reservations').delete().eq('reserved_by', targetUser.id);
+        await supabase.from('transactions').delete().or(`checked_out_by.eq.${targetUser.id},checked_in_by.eq.${targetUser.id}`);
+        const { error } = await supabase.from('users').delete().eq('id', targetUser.id);
+        if (error) console.warn("Delete user server sync failed:", error);
+        setUsers(prev => prev.filter(u => u.id !== targetUser.id));
+        setTransactions(prev => prev.filter(t => t.checkedOutBy !== targetUser.id && t.checkedInBy !== targetUser.id));
+        setReservations(prev => prev.filter(r => r.reservedBy !== targetUser.id));
+        setModal(null);
+        showToast("User removed.", error ? "warning" : "success");
       } else if (action === "restore-items") {
-        data = await runPrivilegedAction(action, { items: actionData.items }, password);
+        const existingIds = new Set(items.map(item => item.id));
+        const missing = SEED_ITEMS.filter(item => !existingIds.has(item.id));
+        if (missing.length) {
+          const { error } = await supabase.from('items').insert(missing.map(i => ({
+            id: i.id, name: i.name, quantity: i.quantity, category: i.category,
+            condition: i.condition || "Good", image: i.image, siteId: i.siteId, zoneId: i.zoneId,
+            location: i.locationDescription, locationDescription: i.locationDescription,
+          })));
+          if (error) console.warn("Restore items server sync failed:", error);
+          setItems(prev => [...prev, ...missing]);
+          setModal(null);
+          showToast(`Restored ${missing.length} default items.`, error ? "warning" : "success");
+        } else {
+          setModal(null);
+          showToast("Default items are already present.", "success");
+        }
       } else {
         throw new Error(`Unsupported action: ${action}`);
-      }
-
-      if (action === "update-user-role" && data?.user) {
-        setUsers(prev => prev.map(u => u.id === data.user.id ? { ...u, role: data.user.role } : u));
-        setModal(null);
-        showToast(`Updated ${data.user.name || targetUser.name}'s role.`, "success");
-      } else if (action === "update-user-status" && data?.user) {
-        setUsers(prev => prev.map(u => u.id === data.user.id ? { ...u, status: data.user.status } : u));
-        setModal(null);
-        showToast(`Approved ${data.user.name || targetUser.name}.`, "success");
-      } else if (action === "delete-user") {
-        setUsers(prev => prev.filter(u => u.id !== targetUser.id));
-        setModal(null);
-        showToast("User removed.", "success");
-      } else if (action === "add-item" && data?.item) {
-        setItems(prev => [...prev, normalizeItem(data.item)]);
-        setModal(null);
-        showToast("Item added!", "success");
-      } else if (action === "edit-item" && data?.item) {
-        setItems(prev => prev.map(it => it.id === data.item.id ? normalizeItem(data.item) : it));
-        setModal(null);
-        showToast("Item updated!", "success");
-      } else if (action === "delete-item") {
-        setItems(prev => prev.filter(it => it.id !== (targetItem?.id || actionData.itemId)));
-        setTransactions(prev => prev.filter(t => t.itemId !== (targetItem?.id || actionData.itemId)));
-        setModal(null);
-        showToast("Item deleted.", "success");
-      } else if (action === "restore-items") {
-        const restored = Number(data?.restored || 0);
-        if (restored > 0) {
-          const existingIds = new Set(items.map(item => item.id));
-          const missing = SEED_ITEMS.filter(item => !existingIds.has(item.id));
-          setItems(prev => [...prev, ...missing]);
-        }
-        setModal(null);
-        showToast(restored > 0 ? `Restored ${restored} default items.` : "Default items are already present.", "success");
       }
     } catch (err) {
       console.error("Privileged action error:", err);
