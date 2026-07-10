@@ -882,7 +882,7 @@ export default function App() {
         }
 
         localStorage.setItem("offline_users_cache", JSON.stringify(u || []));
-        localStorage.setItem("offline_items_cache", JSON.stringify((it && it.length ? it : items) || []));
+        localStorage.setItem("offline_items_cache", JSON.stringify((it && it.length ? it : SEED_ITEMS) || []));
         localStorage.setItem("offline_tx_cache", JSON.stringify(tx || []));
       } catch (err) {
         console.warn("Failed to load data from Supabase:", err);
