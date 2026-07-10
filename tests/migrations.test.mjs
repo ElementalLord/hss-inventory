@@ -14,5 +14,8 @@ test("audit trigger reads table-specific identifiers from JSON", async () => {
   assert.match(migration, /v_after ->> 'tx_id'/);
   assert.match(migration, /v_before ->> 'id'/);
   assert.match(migration, /v_before ->> 'tx_id'/);
+  assert.match(migration, /SECURITY DEFINER/);
+  assert.match(migration, /SET search_path = public/);
+  assert.match(migration, /INSERT INTO public\.app_audit_log/);
   assert.doesNotMatch(migration, /\b(?:NEW|OLD)\.(?:id|tx_id)\b/);
 });

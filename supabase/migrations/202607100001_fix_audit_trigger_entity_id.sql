@@ -1,6 +1,8 @@
 CREATE OR REPLACE FUNCTION public.log_app_audit_change()
 RETURNS trigger
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
   v_entity_id text;
@@ -24,7 +26,7 @@ BEGIN
     v_entity_id := COALESCE(v_before ->> 'id', v_before ->> 'tx_id');
   END IF;
 
-  INSERT INTO app_audit_log (
+  INSERT INTO public.app_audit_log (
     entity_type,
     entity_id,
     action,
