@@ -1,4 +1,4 @@
-import { supabase } from './supabase.js'
+import { isSupabaseConfigured, supabase } from './supabase.js'
 import { DEVELOPER_USERNAME, normalizeEmail, isPrivilegedRole, isDeveloperUser, canDeleteUser, canAssignRole } from './security.js'
 import { useState, useEffect, useRef } from "react";
 
@@ -502,6 +502,16 @@ const css = `
   .toast.success { background: #1E7A45; }
   .toast.error { background: var(--danger); }
   .toast.warning { background: var(--warning); }
+  .sync-banner {
+    margin: 12px 16px 0;
+    padding: 12px 16px;
+    border: 1px solid #f0c36d;
+    border-radius: 10px;
+    background: #fff8e5;
+    color: #7a5200;
+    font-size: 13px;
+    font-weight: 600;
+  }
 
   /* ── OTP ── */
   .otp-row { display: flex; gap: 10px; justify-content: center; margin: 24px 0; }
@@ -639,7 +649,9 @@ export default function App() {
     try {
       const cached = JSON.parse(window.localStorage.getItem("item_cache") || "[]");
       if (Array.isArray(cached) && cached.length) return cached;
-    } catch {}
+    } catch {
+      return [...SEED_ITEMS];
+    }
     return [...SEED_ITEMS];
   });
   const [transactions, setTransactions] = useState(() => {
@@ -647,7 +659,9 @@ export default function App() {
     try {
       const cached = JSON.parse(window.localStorage.getItem("transaction_cache") || "[]");
       if (Array.isArray(cached)) return cached;
-    } catch {}
+    } catch {
+      return [];
+    }
     return [];
   });
   const [currentUser, setCurrentUser] = useState(null);
@@ -686,11 +700,6 @@ export default function App() {
   const isMobileMode = uiMode === "mobile";
 
   const showToast = (msg, type = "success") => setToast({ msg, type });
-  const normalizeItemLikeCache = (item) => ({
-    ...item,
-    locationDescription: item.locationDescription ?? item.location ?? "",
-    condition: item.condition ?? item.item_condition ?? "Good",
-  });
   const normalizeItem = (item) => ({
     ...item,
     locationDescription: item.locationDescription ?? item.location ?? "",
@@ -873,7 +882,7 @@ export default function App() {
         }
 
         localStorage.setItem("offline_users_cache", JSON.stringify(u || []));
-        localStorage.setItem("offline_items_cache", JSON.stringify((it && it.length ? it : items) || []));
+        localStorage.setItem("offline_items_cache", JSON.stringify((it && it.length ? it : SEED_ITEMS) || []));
         localStorage.setItem("offline_tx_cache", JSON.stringify(tx || []));
       } catch (err) {
         console.warn("Failed to load data from Supabase:", err);
@@ -1272,32 +1281,6 @@ const handleApproveUser = async (userId) => {
   });
 };
 
-  const runPrivilegedAction = async (action, payload, actorPassword) => {
-    const password = String(actorPassword || "").trim();
-    if (!password) {
-      throw new Error("Please enter your password.");
-    }
-
-    const { data, error } = await supabase.functions.invoke("privileged-action", {
-      body: {
-        action,
-        actorEmail: currentUser.email,
-        actorPassword: password,
-        payload,
-      },
-    });
-
-    if (error) {
-      throw error;
-    }
-
-    if (data?.error) {
-      throw new Error(data.error);
-    }
-
-    return data;
-  };
-
   const verifyActorPassword = async (password) => {
     const typed = String(password || "").trim();
     if (!typed) throw new Error("Please enter your password.");
@@ -1364,7 +1347,6 @@ const handleApproveUser = async (userId) => {
     const password = String(actionData?.password || "").trim();
     const action = String(actionData?.action || "").trim();
     const targetUser = actionData?.targetUser;
-    const targetItem = actionData?.targetItem;
     const selectedRole = String(actionData?.selectedRole || targetUser?.role || "").trim();
     const status = String(actionData?.status || "").trim();
 
@@ -1461,17 +1443,27 @@ const handleAddItem = async (data) => {
       locationDescription: newItem.locationDescription,
     }).select().single();
 
+    if (error && isSupabaseConfigured) {
+      console.error("Insert error:", error);
+      showToast("Unable to add item because Supabase sync failed.", "error");
+      return;
+    }
+
     if (error) {
       setItems(prev => [...prev, newItem]);
-      showToast("Item added locally (offline mode).", "warning");
+      showToast("Item added locally. Cloud sync is not configured.", "warning");
     } else {
       setItems(prev => [...prev, normalizeItem(inserted)]);
       showToast("Item added!", "success");
     }
   } catch (err) {
     console.error("Insert exception:", err);
+    if (isSupabaseConfigured) {
+      showToast("Unable to add item because Supabase sync failed.", "error");
+      return;
+    }
     setItems(prev => [...prev, newItem]);
-    showToast("Item added locally (offline mode).", "warning");
+    showToast("Item added locally. Cloud sync is not configured.", "warning");
   }
   setModal(null);
 };
@@ -1507,17 +1499,27 @@ const handleEditItem = async (data) => {
       locationDescription: updatedItem.locationDescription,
     }).eq('id', updatedItem.id).select().single();
 
+    if (error && isSupabaseConfigured) {
+      console.error("Update error:", error);
+      showToast("Unable to update item because Supabase sync failed.", "error");
+      return;
+    }
+
     if (error) {
       setItems(prev => prev.map(it => it.id === updatedItem.id ? updatedItem : it));
-      showToast("Item updated locally (offline mode).", "warning");
+      showToast("Item updated locally. Cloud sync is not configured.", "warning");
     } else {
       setItems(prev => prev.map(it => it.id === saved.id ? normalizeItem(saved) : it));
       showToast("Item updated!", "success");
     }
   } catch (err) {
     console.error("Update exception:", err);
+    if (isSupabaseConfigured) {
+      showToast("Unable to update item because Supabase sync failed.", "error");
+      return;
+    }
     setItems(prev => prev.map(it => it.id === updatedItem.id ? updatedItem : it));
-    showToast("Item updated locally (offline mode).", "warning");
+    showToast("Item updated locally. Cloud sync is not configured.", "warning");
   }
   setModal(null);
 };
@@ -1538,7 +1540,7 @@ const handleRestoreItems = async () => {
     });
   };
 
-  const handleDeleteItem = async (itemId, password) => {
+  const handleDeleteItem = async (itemId) => {
   if (!isPrivilegedRole(currentUser?.role)) {
     showToast("You do not have permission to delete items.", "error");
     return;
@@ -1550,16 +1552,36 @@ const handleRestoreItems = async () => {
   }
 
   try {
-    const { error } = await supabase.from('items').delete().eq('id', itemId);
+    const { data: deleted, error } = await supabase
+      .from('items')
+      .delete()
+      .eq('id', itemId)
+      .select('id')
+      .maybeSingle();
+
+    if (error && isSupabaseConfigured) {
+      console.error("Delete item error:", error);
+      showToast("Unable to delete item because Supabase sync failed.", "error");
+      return;
+    }
+
+    if (isSupabaseConfigured && !deleted) {
+      showToast("Unable to delete item because it was not found in Supabase.", "error");
+      return;
+    }
+
     setItems(prev => prev.filter(i => i.id !== itemId));
     setTransactions(prev => prev.filter(t => t.itemId !== itemId));
-    if (error) showToast("Item deleted locally (offline mode).", "warning");
-    else showToast("Item deleted.", "success");
+    showToast(error ? "Item deleted locally. Cloud sync is not configured." : "Item deleted.", error ? "warning" : "success");
   } catch (err) {
     console.error("Delete item exception:", err);
+    if (isSupabaseConfigured) {
+      showToast("Unable to delete item because Supabase sync failed.", "error");
+      return;
+    }
     setItems(prev => prev.filter(i => i.id !== itemId));
     setTransactions(prev => prev.filter(t => t.itemId !== itemId));
-    showToast("Item deleted locally (offline mode).", "warning");
+    showToast("Item deleted locally. Cloud sync is not configured.", "warning");
   }
 
   setModal(null);
@@ -1620,15 +1642,24 @@ const handleCheckOut = async (itemId, quantity, dueDateIso) => {
     checked_in_by: null, check_in_time: null, status: "out",
     due_date: dueDate,
   };
-  const { error } = await supabase.from('transactions').insert(tx);
-  if (error) showToast("Checked out locally; sync to server failed.", "warning");
+  const { data: savedTx, error } = await supabase.from('transactions').insert(tx).select().single();
+  if (error && isSupabaseConfigured) {
+    console.error("Checkout error:", error);
+    showToast("Unable to check out item because Supabase sync failed.", "error");
+    return;
+  }
+
+  const persistedTx = savedTx || tx;
   setTransactions(prev => [...prev, {
-    id: tx.id, itemId, itemName: item.name, quantity: requestedQty,
+    id: persistedTx.id, itemId, itemName: item.name, quantity: requestedQty,
     checkedOutBy: currentUser.id, checkedOutByName: currentUser.name,
-    checkOutTime: tx.check_out_time, status: "out",
+    checkOutTime: persistedTx.check_out_time, status: "out",
   }]);
-  setDueDateByTx(prev => ({ ...prev, [tx.id]: dueDate }));
-  showToast(`${item.name} checked out!`, "success");
+  setDueDateByTx(prev => ({ ...prev, [persistedTx.id]: persistedTx.due_date || dueDate }));
+  showToast(
+    error ? `${item.name} checked out locally. Cloud sync is not configured.` : `${item.name} checked out!`,
+    error ? "warning" : "success"
+  );
   setModal(null);
 };
 const handleCheckIn = async (txId, report = { condition: "good", note: "" }) => {
@@ -1645,11 +1676,22 @@ const handleCheckIn = async (txId, report = { condition: "good", note: "" }) => 
   }
 
   const now = new Date().toISOString();
-  const { error } = await supabase.from('transactions').update({
+  const { data: savedTx, error } = await supabase.from('transactions').update({
     status: "in", checked_in_by: currentUser.id,
     checked_in_by_name: currentUser.name, check_in_time: now,
-  }).eq('id', txId);
-  if (error) showToast("Checked in locally; sync to server failed.", "warning");
+  }).eq('id', txId).select().maybeSingle();
+
+  if (error && isSupabaseConfigured) {
+    console.error("Check-in error:", error);
+    showToast("Unable to check in item because Supabase sync failed.", "error");
+    return;
+  }
+
+  if (isSupabaseConfigured && !savedTx) {
+    showToast("Unable to check in item because it was not found in Supabase.", "error");
+    return;
+  }
+
   setTransactions(prev => prev.map(t =>
     t.id === txId ? { ...t, status: "in", checkedInBy: currentUser.id, checkedInByName: currentUser.name, checkInTime: now } : t
   ));
@@ -1675,7 +1717,7 @@ const handleCheckIn = async (txId, report = { condition: "good", note: "" }) => 
   } else {
     await supabase.from('checkin_reports').delete().eq('tx_id', txId);
   }
-  showToast("Item checked in!", "success");
+  showToast(error ? "Item checked in locally. Cloud sync is not configured." : "Item checked in!", error ? "warning" : "success");
   setModal(null);
 };
 
@@ -1708,7 +1750,7 @@ const handleReserveItem = async (itemId, quantity, reservedFor) => {
     status: "active",
     created_at: new Date().toISOString(),
   });
-  const { error: reserveError } = await supabase.from('item_reservations').insert({
+  const { data: savedReservation, error: reserveError } = await supabase.from('item_reservations').insert({
     id: reservation.id,
     item_id: reservation.itemId,
     item_name: reservation.itemName,
@@ -1718,10 +1760,25 @@ const handleReserveItem = async (itemId, quantity, reservedFor) => {
     reserved_by_name: reservation.reservedByName,
     status: reservation.status,
     created_at: reservation.createdAt,
+  }).select().single();
+
+  if (reserveError && isSupabaseConfigured) {
+    console.error("Reservation error:", reserveError);
+    showToast("Unable to save reservation because Supabase sync failed.", "error");
+    return;
+  }
+
+  const persistedReservation = normalizeReservation(savedReservation || reservation);
+  setReservations(prev => {
+    if (prev.some(r => r.id === persistedReservation.id)) {
+      return prev.map(r => r.id === persistedReservation.id ? persistedReservation : r);
+    }
+    return [persistedReservation, ...prev].slice(0, 500);
   });
-  if (reserveError) showToast("Reservation saved locally; sync to server failed.", "warning");
-  setReservations(prev => [reservation, ...prev].slice(0, 500));
-  showToast(`${item.name} reserved for ${normalizedDate}.`, "success");
+  showToast(
+    reserveError ? `${item.name} reserved locally. Cloud sync is not configured.` : `${item.name} reserved for ${normalizedDate}.`,
+    reserveError ? "warning" : "success"
+  );
   setModal(null);
 };
 
@@ -1734,18 +1791,32 @@ const handleCancelReservation = async (reservationId) => {
     return;
   }
 
-  const { error } = await supabase
+  const { data: cancelledReservation, error } = await supabase
     .from('item_reservations')
     .update({ status: 'cancelled' })
-    .eq('id', reservationId);
+    .eq('id', reservationId)
+    .select()
+    .maybeSingle();
 
-  if (error) {
-    showToast("Unable to cancel reservation.", "error");
+  if (error && isSupabaseConfigured) {
+    console.error("Cancel reservation error:", error);
+    showToast("Unable to cancel reservation because Supabase sync failed.", "error");
     return;
   }
 
-  setReservations(prev => prev.map(r => r.id === reservationId ? { ...r, status: 'cancelled' } : r));
-  showToast("Reservation cancelled.", "success");
+  if (isSupabaseConfigured && !cancelledReservation) {
+    showToast("Unable to cancel reservation because it was not found in Supabase.", "error");
+    return;
+  }
+
+  const updatedReservation = cancelledReservation
+    ? normalizeReservation(cancelledReservation)
+    : { ...row, status: "cancelled" };
+  setReservations(prev => prev.map(r => r.id === reservationId ? updatedReservation : r));
+  showToast(
+    error ? "Reservation cancelled locally. Cloud sync is not configured." : "Reservation cancelled.",
+    error ? "warning" : "success"
+  );
 };
 
 const handleWithdrawReservation = async (reservationId, withdrawQty) => {
@@ -1774,24 +1845,37 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
   const remaining = Number(row.quantity || 0) - qty;
   const updates = remaining > 0
     ? { quantity: remaining }
-    : { quantity: 0, status: "cancelled" };
+    : { status: "cancelled" };
 
-  const { error } = await supabase
+  const { data: savedReservation, error } = await supabase
     .from("item_reservations")
     .update(updates)
-    .eq("id", reservationId);
+    .eq("id", reservationId)
+    .select()
+    .maybeSingle();
 
-  if (error) {
-    showToast("Unable to withdraw reservation quantity.", "error");
+  if (error && isSupabaseConfigured) {
+    console.error("Withdraw reservation error:", error);
+    showToast("Unable to withdraw reservation quantity because Supabase sync failed.", "error");
+    return;
+  }
+
+  if (isSupabaseConfigured && !savedReservation) {
+    showToast("Unable to withdraw reservation because it was not found in Supabase.", "error");
     return;
   }
 
   setReservations(prev => prev.map(r => {
     if (r.id !== reservationId) return r;
+    if (savedReservation) return normalizeReservation(savedReservation);
     if (remaining > 0) return { ...r, quantity: remaining };
-    return { ...r, quantity: 0, status: "cancelled" };
+    return { ...r, status: "cancelled" };
   }));
-  showToast(remaining > 0 ? `Withdrew ${qty}. ${remaining} still reserved.` : "Reservation fully withdrawn.", "success");
+  const successMessage = remaining > 0 ? `Withdrew ${qty}. ${remaining} still reserved.` : "Reservation fully withdrawn.";
+  showToast(
+    error ? `${successMessage} Cloud sync is not configured.` : successMessage,
+    error ? "warning" : "success"
+  );
   setModal(null);
 };
 
@@ -2112,6 +2196,11 @@ const handleWithdrawReservation = async (reservationId, withdrawQty) => {
 
         {/* Main */}
         <main className="main-content">
+          {!isSupabaseConfigured && (
+            <div className="sync-banner" role="status">
+              Cloud sync is unavailable. Changes are stored only on this device until Supabase is configured in Vercel.
+            </div>
+          )}
           {/* ── Dashboard ── */}
           {view === "dashboard" && (
             <>

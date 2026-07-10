@@ -1,5 +1,18 @@
 # React + Vite
 
+## Supabase configuration
+
+Cloud synchronization requires these build-time environment variables:
+
+```bash
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+```
+
+For Vercel, add both variables to Production, Preview, and Development in
+**Project Settings → Environment Variables**, then redeploy. A deployment built
+without them runs in local-only mode and displays a warning banner.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:
